@@ -176,6 +176,22 @@ nav .fabwrap{flex:1; display:flex; justify-content:center}
 @keyframes up{from{transform:translateY(40px); opacity:.4} to{transform:none; opacity:1}}
 #modal h3{margin:0 0 12px; font-size:16px; display:flex; align-items:center; justify-content:space-between}
 .x{border:0; background:#edeef6; border-radius:99px; width:30px; height:30px; font-size:14px; cursor:pointer}
+/* legenda grafik */
+.legend{display:flex; gap:14px; justify-content:center; margin-top:6px; font-size:12px; color:var(--mut)}
+.legend span{display:inline-flex; align-items:center; gap:5px}
+.legend .sw{width:11px; height:11px; border-radius:3px; display:inline-block}
+.legend .sw.hatch{background:var(--out);
+  background-image:repeating-linear-gradient(45deg, rgba(255,255,255,.55) 0 2px, transparent 2px 4px)}
+/* blok khusus cetak / PDF */
+.printonly{display:none}
+/* layar kunci */
+#lock{position:fixed; inset:0; z-index:70; display:none; align-items:center; justify-content:center; padding:20px;
+  background:var(--grad); color:#fff}
+#lock.on{display:flex}
+.lockbox{background:var(--card); color:var(--ink); border-radius:22px; padding:26px 20px; width:100%; max-width:340px; text-align:center; box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.lockbox h2{margin:0; font-size:19px}
+.lockicon{font-size:38px; margin-bottom:6px}
+.pinin{text-align:center; font-size:24px; letter-spacing:8px; padding:14px}
 /* toast */
 #toast{
   position:fixed; left:50%; transform:translateX(-50%); bottom:calc(86px + env(safe-area-inset-bottom));
@@ -208,6 +224,22 @@ nav .fabwrap{flex:1; display:flex; justify-content:center}
 .empty{text-align:center; padding:26px 10px; color:var(--mut)}
 .empty .e{font-size:40px; margin-bottom:8px}
 a{color:var(--pri)}
+/* ---------- tampilan cetak / PDF ---------- */
+@media print{
+  @page{margin:14mm}
+  html,body{background:#fff; font-size:12px}
+  header,nav,#toast,#overlay,#lock,.noprint,.msel,.persw,.fab{display:none !important}
+  main{max-width:none; margin:0; padding:0}
+  .printonly{display:block}
+  .printonly .pt{font-size:19px; font-weight:800}
+  .printonly .ps{font-size:12px; color:var(--mut); margin-bottom:12px}
+  .noteprint{border:1px solid var(--line); border-radius:8px; padding:10px; white-space:pre-wrap; font-size:12px}
+  .card{box-shadow:none; border:1px solid var(--line); break-inside:avoid; page-break-inside:avoid; margin-bottom:10px}
+  .verdict,.sum,.stat,.bar i,.legend .sw,svg{-webkit-print-color-adjust:exact; print-color-adjust:exact}
+  .verdict{break-inside:avoid}
+  .stat2{display:grid; grid-template-columns:repeat(4,1fr)}
+  svg{max-width:520px}
+}
 </style>
 </head>
 <body>
@@ -229,6 +261,7 @@ a{color:var(--pri)}
 </nav>
 
 <div id="overlay"><div id="modal"></div></div>
+<div id="lock"></div>
 <div id="toast"></div>
 
 <script>
@@ -267,6 +300,55 @@ const dLabel=ds=>{const d=new Date(ds+'T12:00:00'); return DAY[d.getDay()]+', '+
 const daysInMonth=k=>{const p=k.split('-').map(Number); return new Date(p[0],p[1],0).getDate();};
 function rid(n){const c='abcdefghijklmnopqrstuvwxyz0123456789'; const a=new Uint32Array(n); crypto.getRandomValues(a); let s=''; for(let i=0;i<n;i++)s+=c[a[i]%c.length]; return s;}
 
+/* ---------- kunci pribadi: PIN di-hash SHA-256 ----------
+   Yang disimpan & disinkronkan hanya hash-nya, tidak pernah PIN aslinya.
+   Fallback murni JS dipakai saat crypto.subtle tidak tersedia (mis. file://). */
+function sha256js(msg){
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const b=[...new TextEncoder().encode(msg)], bl=b.length*8;
+  b.push(0x80); while(b.length%64!==56) b.push(0);
+  for(let i=7;i>=0;i--) b.push((bl/Math.pow(2,i*8))&0xff);
+  const rr=(x,n)=>(x>>>n)|(x<<(32-n));
+  for(let i=0;i<b.length;i+=64){
+    const w=new Array(64);
+    for(let j=0;j<16;j++) w[j]=(b[i+j*4]<<24)|(b[i+j*4+1]<<16)|(b[i+j*4+2]<<8)|b[i+j*4+3];
+    for(let j=16;j<64;j++){
+      const s0=rr(w[j-15],7)^rr(w[j-15],18)^(w[j-15]>>>3), s1=rr(w[j-2],17)^rr(w[j-2],19)^(w[j-2]>>>10);
+      w[j]=(w[j-16]+s0+w[j-7]+s1)|0;
+    }
+    let [a,bb,c,d,e,f,g,h]=H;
+    for(let j=0;j<64;j++){
+      const S1=rr(e,6)^rr(e,11)^rr(e,25), ch=(e&f)^(~e&g), t1=(h+S1+ch+K[j]+w[j])|0;
+      const S0=rr(a,2)^rr(a,13)^rr(a,22), mj=(a&bb)^(a&c)^(bb&c), t2=(S0+mj)|0;
+      h=g; g=f; f=e; e=(d+t1)|0; d=c; c=bb; bb=a; a=(t1+t2)|0;
+    }
+    H=H.map((x,k)=>(x+[a,bb,c,d,e,f,g,h][k])|0);
+  }
+  return H.map(x=>(x>>>0).toString(16).padStart(8,'0')).join('');
+}
+async function sha256(s){
+  if(window.crypto&&crypto.subtle){
+    try{
+      const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+      return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+    }catch(e){/* jatuh ke fallback */}
+  }
+  return sha256js(s);
+}
+const pinOf=who=>((S.settings.pin||{})[who])||'';
+const anyPin=()=>!!(pinOf('a')||pinOf('b'));
+/* status buka-kunci hanya untuk sesi ini, tidak pernah disimpan */
+const SESSION={unlocked:{a:false,b:false}, lastAct:Date.now()};
+const isUnlocked=who=>!pinOf(who)||SESSION.unlocked[who];
+
 /* ---------- kategori bawaan ---------- */
 function defaultCats(){return [
   {id:'gaji',     name:'Gaji',                 icon:'💼', type:'in',  budget:0},
@@ -288,10 +370,10 @@ function defaultCats(){return [
 /* ---------- state ---------- */
 const LSK='keuanganBerdua.v1';      // data bersama (ikut tersinkron)
 const LSL='keuanganBerdua.loc.v1';  // khusus perangkat ini (identitas HP)
-let S={ settings:{nameA:'Orang 1', nameB:'Orang 2', currency:'GBP', limitTotal:{a:0,b:0}, sync:{enabled:false, apiKey:'', projectId:'', coupleId:''}}, categories:defaultCats(), tx:[], reviews:{} };
+let S={ settings:{nameA:'Orang 1', nameB:'Orang 2', currency:'GBP', limitTotal:{a:0,b:0}, pin:{a:'',b:''}, autolock:true, sync:{enabled:false, apiKey:'', projectId:'', coupleId:''}}, categories:defaultCats(), tx:[], reviews:{} };
 let L={ me:'a', deviceId:rid(8), setupDone:false };
 function load(){
-  try{const j=JSON.parse(localStorage.getItem(LSK)); if(j&&j.settings){S=j; S.tx=S.tx||[]; S.reviews=S.reviews||{}; S.categories=S.categories&&S.categories.length?S.categories:defaultCats(); S.settings.sync=S.settings.sync||{enabled:false,apiKey:'',projectId:'',coupleId:''}; S.settings.currency=S.settings.currency||'GBP'; S.settings.limitTotal=S.settings.limitTotal||{a:0,b:0};}}catch(e){}
+  try{const j=JSON.parse(localStorage.getItem(LSK)); if(j&&j.settings){S=j; S.tx=S.tx||[]; S.reviews=S.reviews||{}; S.categories=S.categories&&S.categories.length?S.categories:defaultCats(); S.settings.sync=S.settings.sync||{enabled:false,apiKey:'',projectId:'',coupleId:''}; S.settings.currency=S.settings.currency||'GBP'; S.settings.limitTotal=S.settings.limitTotal||{a:0,b:0}; S.settings.pin=S.settings.pin||{a:'',b:''}; S.settings.autolock=S.settings.autolock!==false;}}catch(e){}
   try{const j=JSON.parse(localStorage.getItem(LSL)); if(j&&j.deviceId)L=j;}catch(e){}
 }
 function save(){ localStorage.setItem(LSK, JSON.stringify(S)); }
@@ -350,11 +432,14 @@ const UI={ tab:'home', month:mkeyNow(), who:'a', f:{type:'all', cat:'all', q:''}
 window.go=t=>{ UI.tab=t; render(); window.scrollTo(0,0); };
 window.chMonth=d=>{ UI.month=mAdd(UI.month,d); render(); };
 window.goReview=k=>{ UI.month=k; go('review'); };
-window.setWho=w=>{ UI.who=w; render(); window.scrollTo(0,0); };
+window.setWho=w=>{
+  if(!isUnlocked(w)) return askPinFor(w, ()=>{ UI.who=w; render(); window.scrollTo(0,0); });
+  UI.who=w; render(); window.scrollTo(0,0);
+};
 const monthSel=()=>`<div class="msel"><button class="mbtn" onclick="chMonth(-1)">‹</button><div class="mlab">${esc(mLabel(UI.month))}</div><button class="mbtn" onclick="chMonth(1)">›</button></div>`;
 /* pengalih orang — hanya satu orang yang datanya tampil pada satu waktu */
 const personSel=()=>`<div class="seg persw">
-  ${['a','b'].map(w=>`<button class="${UI.who===w?'on p'+w:''}" onclick="setWho('${w}')">${esc(nameOf(w))}${L.me===w?' · Saya':''}</button>`).join('')}
+  ${['a','b'].map(w=>`<button class="${UI.who===w?'on p'+w:''}" onclick="setWho('${w}')">${!isUnlocked(w)?'🔒 ':''}${esc(nameOf(w))}${L.me===w?' · Saya':''}</button>`).join('')}
 </div>`;
 const viewedLabel=()=>UI.who===L.me?'Keuanganmu':'Keuangan '+nameOf(UI.who);
 
@@ -492,13 +577,66 @@ function deltaBadge(d,goodWhenDown){
   const up=d>0, good=goodWhenDown?!up:up;
   return `<span class="delta ${good?'down':'up'}">${up?'▲':'▼'} ${Math.abs(d)}%</span>`;
 }
+/* ---------- grafik pemasukan vs pengeluaran (SVG, tanpa pustaka luar) ----------
+   Kolom berkelompok: satu kelompok per bulan, hijau = masuk, merah = keluar.
+   Pasangan hijau/merah termasuk sulit dibedakan pada buta warna deutan, jadi
+   identitasnya diperkuat tiga lapis: urutan posisi tetap (masuk selalu kiri),
+   legenda, dan arsiran pada batang pengeluaran. */
+function niceMax(v){
+  if(v<=0) return 1;
+  const p=Math.pow(10, Math.floor(Math.log10(v)));
+  for(const m of [1,1.25,1.5,2,2.5,3,4,5,6,8,10]) if(p*m>=v) return p*m;
+  return p*10;
+}
+function barPath(x,y,w,h,r){
+  r=Math.max(0, Math.min(r, w/2, h));
+  return `M${x},${y+h}L${x},${y+r}Q${x},${y} ${x+r},${y}L${x+w-r},${y}Q${x+w},${y} ${x+w},${y+r}L${x+w},${y+h}Z`;
+}
+function chartIO(msums,k){
+  const W=360,H=204,padL=48,padR=10,padT=12,padB=30;
+  const pw=W-padL-padR, ph=H-padT-padB, n=msums.length, slot=pw/n;
+  const bw=Math.min(20,(slot-14)/2), gap=2;
+  const max=niceMax(Math.max(...msums.flatMap(x=>[x.s.inn,x.s.out]),0));
+  const y=v=>padT+ph-(v/max)*ph;
+  const tick=v=>{const c=cur(); return c.sym+(v>=1000?(v/1000).toLocaleString(c.locale,{maximumFractionDigits:1})+'k':Math.round(v).toLocaleString(c.locale));};
+  let g='';
+  // garis bantu tipis + label sumbu
+  for(const f of [0,.5,1]){
+    const v=max*f, yy=y(v);
+    g+=`<line x1="${padL}" y1="${yy}" x2="${W-padR}" y2="${yy}" stroke="#e6e8f2" stroke-width="1"/>`;
+    g+=`<text x="${padL-6}" y="${yy+4}" text-anchor="end" font-size="10" fill="#6a7185">${esc(tick(v))}</text>`;
+  }
+  msums.forEach(({m,s},i)=>{
+    const cx=padL+slot*i+slot/2;
+    if(m===k) g+=`<rect x="${cx-slot/2+2}" y="${padT-4}" width="${slot-4}" height="${ph+8}" rx="7" fill="#eeeefc"/>`;
+    const x1=cx-bw-gap/2, x2=cx+gap/2;
+    if(s.inn>0) g+=`<path d="${barPath(x1,y(s.inn),bw,padT+ph-y(s.inn),4)}" fill="#0ca678"/>`;
+    if(s.out>0) g+=`<path d="${barPath(x2,y(s.out),bw,padT+ph-y(s.out),4)}" fill="url(#hatchOut)"/>`;
+    g+=`<text x="${cx}" y="${H-12}" text-anchor="middle" font-size="10" fill="${m===k?'#1d2135':'#6a7185'}" font-weight="${m===k?'700':'400'}">${esc(mShort(m))}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
+    aria-label="Grafik batang pemasukan dan pengeluaran enam bulan terakhir">
+    <defs><pattern id="hatchOut" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="6" height="6" fill="#e5484d"/><line x1="0" y1="0" x2="0" y2="6" stroke="#fff" stroke-opacity=".4" stroke-width="2"/>
+    </pattern></defs>
+    <line x1="${padL}" y1="${padT+ph}" x2="${W-padR}" y2="${padT+ph}" stroke="#c9cddd" stroke-width="1"/>
+    ${g}</svg>`;
+}
+const chartLegend=()=>`<div class="legend">
+  <span><i class="sw" style="background:#0ca678"></i>Pemasukan</span>
+  <span><i class="sw hatch"></i>Pengeluaran</span></div>`;
+
 function vReview(){
   const k=UI.month, w=UI.who, s=sums(k,w), sp=sums(mAdd(k,-1),w), mine=w===L.me;
   const rv=S.reviews[k]||{};
-  let h=`<div class="small mut" style="margin:2px 2px 8px">📋 Review bulanan ${esc(nameOf(w))} — lihat rapor masing-masing, lalu tulis kesepakatan bersama di bawah.</div>`;
+  let h=`<div class="printonly">
+    <div class="pt">Review Keuangan Bulanan</div>
+    <div class="ps">${esc(nameOf(w))} · ${esc(mLabel(k))} · dicetak ${new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}</div>
+  </div>`;
+  h+=`<div class="small mut noprint" style="margin:2px 2px 8px">📋 Review bulanan ${esc(nameOf(w))} — lihat rapor masing-masing, lalu tulis kesepakatan bersama di bawah.</div>`;
   h+=personSel()+monthSel();
   // riwayat 6 bulan
-  h+=`<div class="mhist" style="margin-bottom:12px">`+
+  h+=`<div class="mhist noprint" style="margin-bottom:12px">`+
     [...Array(6)].map((_,i)=>{const mk=mAdd(mkeyNow(),-(5-i)); const done=S.reviews[mk]&&S.reviews[mk].done;
       return `<button class="${done?'done':''} ${mk===k?'cur':''}" onclick="goReview('${mk}')">${done?'✅ ':''}${esc(mShort(mk))}</button>`;}).join('')+`</div>`;
   if(!s.count){
@@ -521,12 +659,16 @@ function vReview(){
     <div class="stat"><div class="t">RATA-RATA / HARI</div><div class="v">${rp(s.out/daysInMonth(k))}</div><span class="tiny mut">pengeluaran</span></div>
     <div class="stat"><div class="t">BULAN LALU (${esc(mShort(mAdd(k,-1)))})</div><div class="v">${rpS(sp.net)}</div><span class="tiny mut">sisa</span></div>
   </div>`;
-  // perkembangan 6 bulan orang ini
+  // grafik pemasukan vs pengeluaran + rincian 6 bulan
   const mks=[...Array(6)].map((_,i)=>mAdd(k,-(5-i)));
   const msums=mks.map(m=>({m, s:sums(m,w)}));
   if(msums.some(x=>x.s.count)){
+    h+=`<div class="card"><h2>📊 Pemasukan vs Pengeluaran</h2>
+      <div class="small mut" style="margin:-4px 0 6px">${esc(mLabel(k))} · masuk <b style="color:var(--in)">${rp(s.inn)}</b> · keluar <b style="color:var(--out)">${rp(s.out)}</b></div>
+      ${chartIO(msums,k)}${chartLegend()}
+      <div class="tiny mut" style="margin-top:6px">Enam bulan terakhir milik ${esc(nameOf(w))}; bulan yang sedang direview disorot.</div></div>`;
     const maxOut=Math.max(...msums.map(x=>x.s.out), 1);
-    h+=`<div class="card"><h2>📈 Perkembangan 6 Bulan ${esc(nameOf(w))}</h2>
+    h+=`<div class="card"><h2>📈 Rincian 6 Bulan ${esc(nameOf(w))}</h2>
       <div class="tiny mut" style="margin-bottom:8px">Pengeluaran tiap bulan, dibanding bulan tertinggi.</div>`;
     for(const {m, s:s2} of msums){
       if(!s2.count){ h+=`<div class="crow"><div class="top"><span class="mut">${esc(mShort(m))}</span><span class="tiny mut">belum ada catatan</span></div></div>`; continue; }
@@ -543,7 +685,7 @@ function vReview(){
     .map(c=>({c,spent:s.byCatOut[c.id]||0})).sort((x,y)=>y.spent-x.spent);
   if(tlim>0||brows.length){
     h+=`<div class="card"><h2>🎯 Batas vs Realisasi
-      <button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">Atur</button></h2>`;
+      <button class="btn ghost sm noprint" style="margin-left:auto" onclick="openLimits()">Atur</button></h2>`;
     if(tlim>0){
       h+=`<div class="crow"><div class="top"><span>${s.out<=tlim?'✅':'❌'} <b>Batas total bulanan</b></span>
         <b>${rp(s.out)}<span class="mut tiny"> / ${rp(tlim)}</span></b></div>
@@ -565,15 +707,26 @@ function vReview(){
     h+=`<div class="card"><h2>🔥 5 Pengeluaran Terbesar</h2>${top.map(txRow).join('')}</div>`;
   }
   // catatan review + tandai selesai
+  h+=`<div class="card noprint"><h2>📄 Simpan Review sebagai PDF</h2>
+    <p class="small mut" style="margin:0 0 10px">Menyusun laporan rapi berisi grafik, angka, batas, dan catatan kesepakatan
+      untuk ${esc(nameOf(w))} bulan ${esc(mLabel(k))}. Pada dialog cetak yang muncul, pilih tujuan
+      <b>“Simpan sebagai PDF”</b> (Android: <i>Save as PDF</i>, iPhone: cubit-perbesar lalu Bagikan).</p>
+    <button class="btn" onclick="printReview()">📄 Buat PDF Review</button></div>`;
   h+=`<div class="card"><h2>✍️ Catatan & Kesepakatan Review</h2>
     ${rv.done?`<div class="donebadge">✅ Review ${esc(mLabel(k))} selesai — ditandai oleh ${esc(nameOf(rv.by||'a'))}${rv.doneAt?', '+new Date(rv.doneAt).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):''}</div>`:''}
-    <textarea id="revNote" rows="4" placeholder="Tulis hasil diskusi kalian… contoh: 'Bulan depan jatah ngopi dikurangi separuh', 'Naikkan setoran tabungan bulanan'." oninput="revNote('${k}',this)">${esc(rv.note||'')}</textarea>
-    <div style="margin-top:10px">${rv.done
+    <textarea class="noprint" id="revNote" rows="4" placeholder="Tulis hasil diskusi kalian… contoh: 'Bulan depan jatah ngopi dikurangi separuh', 'Naikkan setoran tabungan bulanan'." oninput="revNote('${k}',this)">${esc(rv.note||'')}</textarea>
+    <div class="printonly noteprint">${rv.note?esc(rv.note):'(belum ada catatan)'}</div>
+    <div class="noprint" style="margin-top:10px">${rv.done
       ?`<button class="btn ghost" onclick="revDone('${k}',true)">↩️ Buka lagi review ini</button>`
       :`<button class="btn green" onclick="revDone('${k}',false)">✅ Tandai Review Selesai (oleh ${esc(nameOf(L.me))})</button>`}</div>
-    <div class="tiny mut" style="margin-top:8px">Catatan ini ikut tersinkron, jadi pasanganmu bisa membacanya di HP-nya.</div></div>`;
+    <div class="tiny mut noprint" style="margin-top:8px">Catatan ini ikut tersinkron, jadi pasanganmu bisa membacanya di HP-nya.</div></div>`;
   return h;
 }
+window.printReview=()=>{
+  const n=$('#revNote');                      // pastikan catatan terbaru ikut tercetak
+  if(n){ const p=document.querySelector('.noteprint'); if(p) p.textContent=n.value||'(belum ada catatan)'; }
+  window.print();
+};
 let _rnT=null;
 window.revNote=(k,el)=>{
   clearTimeout(_rnT);
@@ -594,8 +747,19 @@ function vSet(){
     <div class="srow"><span style="font-size:19px">${c.icon}</span>
       <div class="n">${esc(c.name)}${t==='out'?`<div class="b">Batas ${esc(nameOf(UI.who))}: ${budgetOf(c,UI.who)>0?limitLabel(c,UI.who):'belum diatur'}</div>`:''}</div>
       <button class="iconbtn" onclick="openCat('${esc(c.id)}')">✏️</button></div>`).join('');
-  const tl=totalLimit(UI.who);
+  const tl=totalLimit(UI.who), hasPin=!!pinOf(UI.who);
   return `
+  <div class="card"><h2>🔒 Kunci Pribadi</h2>
+    <p class="small mut" style="margin:0 0 10px">Catatan <b>${esc(nameOf(UI.who))}</b> hanya bisa dibuka dengan PIN miliknya —
+      termasuk saat pasangan mencoba berpindah ke catatanmu di HP mana pun.</p>
+    <div class="srow"><span style="font-size:19px">${hasPin?'🔐':'🔓'}</span>
+      <div class="n">Status<div class="b">${hasPin?'Terkunci dengan PIN':'Belum dikunci — siapa pun bisa membuka'}</div></div></div>
+    ${hasPin?`<div class="srow"><span style="font-size:19px">⏱️</span>
+      <div class="n">Kunci otomatis<div class="b">${S.settings.autolock!==false?'Aktif — setelah 5 menit menganggur':'Nonaktif'}</div></div>
+      <button class="btn ghost sm" onclick="toggleAutolock()">${S.settings.autolock!==false?'Matikan':'Aktifkan'}</button></div>`:''}
+    <button class="btn" style="margin-top:12px" onclick="openPin()">${hasPin?'🔑 Ganti / Hapus PIN':'🔒 Pasang PIN untuk '+esc(nameOf(UI.who))}</button>
+    ${hasPin?`<button class="btn ghost" style="margin-top:8px" onclick="lockNow()">🔒 Kunci sekarang</button>`:''}
+  </div>`+`
   <div class="card"><h2>👥 Profil Berdua</h2>
     <div class="grid2">
       <div class="field"><label>Nama orang ke-1</label><input id="setNameA" value="${esc(S.settings.nameA)}" onchange="saveNames()"></div>
@@ -681,6 +845,7 @@ window.saveNames=()=>{
 };
 window.setMe=w=>{ L.me=w; UI.who=w; saveL(); render(); toast('HP ini sekarang milik '+nameOf(w)); };
 window.setCur=c=>{ S.settings.currency=c; save(); queueSync('settings'); render(); toast('Mata uang: '+(c==='IDR'?'Rupiah (Rp)':'Poundsterling (£)')); };
+window.toggleAutolock=()=>{ S.settings.autolock=S.settings.autolock===false; save(); queueSync('settings'); render(); };
 const appUrl=()=>location.href.split('#')[0].split('?')[0];
 window.shareApp=async()=>{
   if(location.protocol==='file:') return toast('Aplikasi belum di-hosting — kirim file index.html ke HP pasangan.');
@@ -889,6 +1054,122 @@ function toast(msg){
   clearTimeout(_toastT); _toastT=setTimeout(()=>t.classList.remove('show'),2600);
 }
 
+/* =====================================================================
+   KUNCI PRIBADI — catatan seseorang hanya terbuka dengan PIN miliknya.
+   PIN yang dimasukkan sekaligus menentukan catatan siapa yang dibuka.
+   ===================================================================== */
+function lockScreen(){
+  const el=$('#lock');
+  const who=pinOf(L.me)?L.me:(pinOf('a')?'a':'b');
+  el.innerHTML=`
+    <div class="lockbox">
+      <div class="lockicon">🔒</div>
+      <h2>${esc(nameOf(who))}${pinOf(L.me)&&who===L.me?'':''}</h2>
+      <p class="small mut" style="margin:2px 0 16px">Masukkan PIN untuk membuka catatanmu.</p>
+      <input id="lockPin" type="password" inputmode="numeric" autocomplete="off" maxlength="12"
+        placeholder="••••" class="pinin" onkeydown="if(event.key==='Enter')tryUnlock()">
+      <div id="lockMsg" class="small" style="color:var(--out);font-weight:700;min-height:18px;margin:8px 0"></div>
+      <button class="btn" onclick="tryUnlock()">Buka</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="forgotPin()">Lupa PIN?</button>
+    </div>`;
+  el.classList.add('on');
+  setTimeout(()=>{const i=$('#lockPin'); if(i) i.focus();},80);
+}
+window.tryUnlock=async()=>{
+  const inp=$('#lockPin'), msg=$('#lockMsg');
+  const v=(inp.value||'').trim();
+  if(!v){ msg.textContent='PIN belum diisi.'; return; }
+  const hash=await sha256(v);
+  const who=['a','b'].find(w=>pinOf(w)&&pinOf(w)===hash);
+  if(!who){ msg.textContent='PIN salah, coba lagi.'; inp.value=''; inp.focus(); return; }
+  SESSION.unlocked[who]=true; SESSION.lastAct=Date.now();
+  UI.who=who;
+  $('#lock').classList.remove('on');
+  render();
+  toast('🔓 Selamat datang, '+nameOf(who)+'!');
+};
+window.forgotPin=()=>{
+  const other=nameOf(L.me==='a'?'b':'a');
+  alert('PIN tidak bisa dilihat kembali karena hanya tersimpan dalam bentuk teracak.\n\n'
+    +'Yang bisa dilakukan:\n'
+    +'• Minta '+other+' membuka dengan PIN miliknya, lalu hapus/ganti PIN-mu lewat Atur → Kunci Pribadi.\n'
+    +'• Atau pasang ulang aplikasi dan pulihkan dari file cadangan JSON.');
+};
+function lockNow(){
+  SESSION.unlocked={a:false,b:false};
+  closeModal();
+  if(anyPin()) lockScreen();
+}
+window.lockNow=lockNow;
+/* kunci otomatis setelah 5 menit tanpa aktivitas */
+const AUTOLOCK_MS=5*60*1000;
+setInterval(()=>{
+  if(!anyPin()||S.settings.autolock===false) return;
+  if($('#lock').classList.contains('on')) return;
+  if(Date.now()-SESSION.lastAct>AUTOLOCK_MS) lockNow();
+}, 20000);
+['click','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{SESSION.lastAct=Date.now();},{passive:true}));
+/* minta PIN saat berpindah ke orang yang catatannya terkunci */
+function askPinFor(who, done){
+  $('#modal').innerHTML=`
+    <h3>🔒 Catatan ${esc(nameOf(who))}<button class="x" onclick="closeModal()">✕</button></h3>
+    <p class="small mut" style="margin:0 0 12px">Catatan ${esc(nameOf(who))} dilindungi PIN. Minta ${esc(nameOf(who))} memasukkannya untuk membuka.</p>
+    <input id="askPin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="••••" class="pinin"
+      onkeydown="if(event.key==='Enter')submitAskPin()">
+    <div id="askMsg" class="small" style="color:var(--out);font-weight:700;min-height:18px;margin:8px 0"></div>
+    <button class="btn" onclick="submitAskPin()">Buka</button>`;
+  openModal();
+  setTimeout(()=>{const i=$('#askPin'); if(i) i.focus();},80);
+  ASK.who=who; ASK.done=done;
+}
+const ASK={};
+window.submitAskPin=async()=>{
+  const v=($('#askPin').value||'').trim();
+  const hash=await sha256(v);
+  if(hash!==pinOf(ASK.who)){ $('#askMsg').textContent='PIN salah.'; $('#askPin').value=''; $('#askPin').focus(); return; }
+  SESSION.unlocked[ASK.who]=true;
+  closeModal();
+  if(ASK.done) ASK.done();
+};
+/* ---------- ganti / hapus PIN ---------- */
+window.openPin=()=>{
+  const w=UI.who, has=!!pinOf(w);
+  $('#modal').innerHTML=`
+    <h3>🔒 Kunci Pribadi<button class="x" onclick="closeModal()">✕</button></h3>
+    <div class="owner ${w}">PIN milik <b>${esc(nameOf(w))}</b>${w===L.me?' (kamu)':''} — hanya melindungi catatan ${esc(nameOf(w))}.</div>
+    ${has?`<div class="field"><label>PIN lama</label><input id="pinOld" type="password" inputmode="numeric" maxlength="12" placeholder="••••"></div>`:''}
+    <div class="field"><label>PIN baru (4–12 angka)</label><input id="pinNew" type="password" inputmode="numeric" maxlength="12" placeholder="••••"></div>
+    <div class="field"><label>Ulangi PIN baru</label><input id="pinNew2" type="password" inputmode="numeric" maxlength="12" placeholder="••••"></div>
+    <div id="pinMsg" class="small" style="color:var(--out);font-weight:700;min-height:18px;margin-bottom:8px"></div>
+    <button class="btn" onclick="savePin()">💾 Simpan PIN</button>
+    ${has?`<button class="btn danger" style="margin-top:8px" onclick="removePin()">🗑️ Hapus PIN (catatan jadi terbuka)</button>`:''}
+    <div class="tiny mut" style="margin-top:10px">PIN disimpan teracak (SHA-256) dan berlaku di kedua HP. Aplikasi mengunci sendiri setelah 5 menit menganggur.</div>`;
+  openModal();
+};
+window.savePin=async()=>{
+  const w=UI.who, msg=$('#pinMsg');
+  if(pinOf(w)){
+    const old=await sha256(($('#pinOld').value||'').trim());
+    if(old!==pinOf(w)){ msg.textContent='PIN lama salah.'; return; }
+  }
+  const p1=($('#pinNew').value||'').trim(), p2=($('#pinNew2').value||'').trim();
+  if(!/^\d{4,12}$/.test(p1)){ msg.textContent='PIN harus 4–12 angka.'; return; }
+  if(p1!==p2){ msg.textContent='Ulangan PIN tidak sama.'; return; }
+  S.settings.pin=S.settings.pin||{a:'',b:''};
+  S.settings.pin[w]=await sha256(p1);
+  SESSION.unlocked[w]=true;
+  save(); queueSync('settings');
+  closeModal(); render(); toast('🔒 PIN tersimpan — catatan '+nameOf(w)+' kini terkunci.');
+};
+window.removePin=async()=>{
+  const w=UI.who;
+  const old=await sha256(($('#pinOld').value||'').trim());
+  if(old!==pinOf(w)){ $('#pinMsg').textContent='Isi PIN lama dulu untuk menghapus.'; return; }
+  S.settings.pin[w]='';
+  save(); queueSync('settings');
+  closeModal(); render(); toast('Kunci untuk '+nameOf(w)+' dihapus.');
+};
+
 /* ---------- setup pertama kali ---------- */
 function firstSetup(){
   $('#modal').innerHTML=`
@@ -975,7 +1256,7 @@ function pushKV(id){
   let data;
   if(id==='categories') data=S.categories;
   else if(id==='reviews') data=S.reviews;
-  else if(id==='settings') data={nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency, limitTotal:S.settings.limitTotal};
+  else if(id==='settings') data={nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency, limitTotal:S.settings.limitTotal, pin:S.settings.pin, autolock:S.settings.autolock};
   SYNC.db.doc(kvPath(id)).set({j:JSON.stringify(data), dev:L.deviceId, at:Date.now()})
     .then(()=>setSyncBadge('on'))
     .catch(e=>setSyncBadge('err','☁️ Gagal kirim: '+e.message));
@@ -1002,7 +1283,7 @@ function listenCloud(){
       if(val==null) return;
       const id=ch.doc.id;
       if(id==='categories'){ S.categories=val; changed=true; }
-      else if(id==='settings'){ Object.assign(S.settings,{nameA:val.nameA??S.settings.nameA, nameB:val.nameB??S.settings.nameB, currency:val.currency??S.settings.currency, limitTotal:val.limitTotal??S.settings.limitTotal}); changed=true; }
+      else if(id==='settings'){ Object.assign(S.settings,{nameA:val.nameA??S.settings.nameA, nameB:val.nameB??S.settings.nameB, currency:val.currency??S.settings.currency, limitTotal:val.limitTotal??S.settings.limitTotal, pin:val.pin??S.settings.pin, autolock:val.autolock??S.settings.autolock}); changed=true; }
       else if(id==='reviews'){
         for(const k in val){ const cur=S.reviews[k]; if(!cur||(val[k].at||0)>=(cur.at||0)) S.reviews[k]=val[k]; }
         changed=true;
@@ -1039,7 +1320,7 @@ function remoteRefresh(){
 /* ---------- ekspor / impor / demo / hapus ---------- */
 window.exportJson=()=>{
   const data={app:'keuangan-berdua', version:1, exportedAt:new Date().toISOString(),
-    settings:{nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency, limitTotal:S.settings.limitTotal},
+    settings:{nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency, limitTotal:S.settings.limitTotal, pin:S.settings.pin, autolock:S.settings.autolock},
     categories:S.categories, tx:S.tx, reviews:S.reviews};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
@@ -1057,7 +1338,7 @@ window.importJson=inp=>{
       if(!Array.isArray(d.tx)||!Array.isArray(d.categories)) throw new Error('format tidak dikenal');
       if(!confirm('Impor akan MENGGANTI data di HP ini dengan isi file ('+d.tx.length+' transaksi). Lanjutkan?')) return;
       S.categories=d.categories; S.tx=d.tx; S.reviews=d.reviews||{};
-      if(d.settings){ S.settings.nameA=d.settings.nameA||S.settings.nameA; S.settings.nameB=d.settings.nameB||S.settings.nameB; S.settings.currency=d.settings.currency||S.settings.currency; S.settings.limitTotal=d.settings.limitTotal||S.settings.limitTotal; }
+      if(d.settings){ S.settings.nameA=d.settings.nameA||S.settings.nameA; S.settings.nameB=d.settings.nameB||S.settings.nameB; S.settings.currency=d.settings.currency||S.settings.currency; S.settings.limitTotal=d.settings.limitTotal||S.settings.limitTotal; S.settings.pin=d.settings.pin||S.settings.pin; if(d.settings.autolock!==undefined) S.settings.autolock=d.settings.autolock; }
       save(); render(); toast('⬆️ Data berhasil diimpor.');
       if(SYNC.on) pushAllToCloud();
     }catch(e){ toast('❌ File tidak valid: '+e.message); }
@@ -1144,7 +1425,8 @@ window.fillDemo=()=>{
 load();
 UI.who=L.me;               // tampilan selalu dibuka pada pemilik HP ini
 render();
-if(!L.setupDone) firstSetup(); else saveL();
+if(!L.setupDone) firstSetup();
+else{ saveL(); if(anyPin()&&!isUnlocked(L.me)) lockScreen(); }
 syncInit();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));

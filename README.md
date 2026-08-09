@@ -22,13 +22,18 @@ perkembangannya. Lengkap dengan anggaran per orang dan **review keuangan setiap 
 - **👤 Tampilan per orang** — Beranda, Riwayat, dan Review hanya menampilkan satu orang; aplikasi terbuka pada pemilik HP itu, dan pengalih di atas untuk melihat pasangan.
 - **☁️ Dua HP tetap satu data** — sinkronisasi real-time lewat Firebase gratis milik sendiri.
 - **🎯 Batas pengeluaran rinci** — batas total bulanan plus batas tiap kategori yang bisa dipatok **per hari, per minggu, atau per bulan**, semuanya dalam satu layar. Beranda menghitung sisa jatah per hari, dan kamu diperingatkan otomatis begitu sebuah batas terlampaui. Batas milik masing-masing orang.
-- **📈 Review setiap bulan** — pengingat otomatis di awal bulan, vonis kesehatan keuangan, perbandingan vs bulan lalu, anggaran vs realisasi, 5 pengeluaran terbesar, dan catatan kesepakatan bersama yang ikut tersinkron.
-- **📊 Perkembangan 6 bulan** — tren pengeluaran orang yang sedang dilihat, untuk memantau progress masing-masing.
+- **🔒 Kunci pribadi** — catatan tiap orang dilindungi PIN sendiri (di-hash SHA-256, berlaku di kedua HP). PIN yang dimasukkan menentukan catatan siapa yang terbuka; pasangan tidak bisa berpindah ke catatanmu tanpa PIN-mu. Kunci otomatis setelah 5 menit menganggur.
+- **📈 Review setiap bulan** — pengingat otomatis di awal bulan, vonis kesehatan keuangan, perbandingan vs bulan lalu, batas vs realisasi, 5 pengeluaran terbesar, dan catatan kesepakatan bersama yang ikut tersinkron.
+- **📊 Grafik & PDF** — grafik batang pemasukan vs pengeluaran 6 bulan langsung di halaman Review, plus tombol **Buat PDF Review** untuk menyimpan laporan rapi lewat *Simpan sebagai PDF* di HP.
 - **💾 Aman** — data tersimpan di HP (offline tetap jalan), ekspor/impor JSON untuk cadangan.
 
-| Beranda | Batas Pengeluaran | Review |
+| Beranda | Batas Pengeluaran | Kunci Pribadi |
 |---|---|---|
-| ![Beranda](screenshots/shot-keuangan-beranda.png) | ![Batas](screenshots/shot-keuangan-batas.png) | ![Review](screenshots/shot-keuangan-review.png) |
+| ![Beranda](screenshots/shot-keuangan-beranda.png) | ![Batas](screenshots/shot-keuangan-batas.png) | ![Kunci](screenshots/shot-keuangan-kunci.png) |
+
+| Grafik Review | Hasil PDF |
+|---|---|
+| ![Grafik](screenshots/shot-keuangan-grafik.png) | ![PDF](screenshots/shot-keuangan-pdf.png) |
 
 ## 🛠️ Teknis
 

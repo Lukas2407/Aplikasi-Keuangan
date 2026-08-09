@@ -40,6 +40,20 @@ Saat pertama dibuka, aplikasi menanyakan:
 
 Semua ini bisa diubah kapan saja lewat **Atur → Profil Berdua**.
 
+### Kunci pribadi 🔒
+Buka **Atur → 🔒 Kunci Pribadi → Pasang PIN**. Setelah dipasang:
+
+- Aplikasi meminta PIN setiap kali dibuka, dan **PIN yang dimasukkan menentukan catatan siapa yang terbuka**.
+- Pasanganmu tidak bisa berpindah ke catatanmu tanpa PIN-mu, di HP mana pun — nama yang terkunci
+  ditandai gembok 🔒 pada pengalih.
+- Aplikasi mengunci sendiri setelah **5 menit menganggur** (bisa dimatikan), dan ada tombol
+  **Kunci sekarang** bila HP mau dipinjamkan sebentar.
+- PIN disimpan dalam bentuk **teracak SHA-256**, tidak pernah sebagai angka aslinya, jadi tidak bisa
+  dibaca siapa pun termasuk dari file cadangan.
+
+Masing-masing memasang PIN sendiri. Kalau salah satu lupa PIN-nya, pasangan bisa membuka dengan PIN
+miliknya lalu menghapus/mengganti PIN yang lupa lewat Atur.
+
 ### Tampilan per orang
 Di bagian atas Beranda, Riwayat, dan Review ada **tombol pengalih berisi nama kalian berdua**.
 Yang tampil hanya keuangan orang yang sedang dipilih, tidak pernah keduanya sekaligus. Aplikasi
@@ -100,7 +114,9 @@ Inilah ritual bulanannya — lakukan **berdua** di awal bulan untuk bulan yang b
 2. Halaman Review menampilkan **rapor satu orang** (sesuai pengalih di atas):
    - **Vonis kesehatan keuangan** — berapa % pemasukan yang berhasil disisakan (atau peringatan defisit);
    - **Perbandingan dengan bulan sebelumnya** — pemasukan/pengeluaran naik atau turun berapa persen;
-   - **Perkembangan 6 bulan** — tren pengeluaran orang itu dari bulan ke bulan;
+   - **Grafik Pemasukan vs Pengeluaran** — batang berpasangan untuk 6 bulan terakhir, hijau untuk
+     pemasukan dan merah berarsir untuk pengeluaran, dengan bulan yang sedang direview disorot;
+   - **Rincian 6 bulan** — angka tiap bulan sebagai tabel pendamping grafik;
    - **Batas vs realisasi** — batas total bulanan dan tiap kategori, dengan tanda ✅/❌;
    - **5 pengeluaran terbesar** bulan itu;
    - Rata-rata pengeluaran per hari.
@@ -111,6 +127,18 @@ Inilah ritual bulanannya — lakukan **berdua** di awal bulan untuk bulan yang b
    tersinkron, jadi terbaca dari kedua HP dan dari kedua tampilan orang.
 5. Tekan **✅ Tandai Review Selesai** — bulan itu mendapat centang hijau di riwayat review,
    tercatat siapa yang menandai dan kapan.
+
+### Menyimpan review sebagai PDF 📄
+Di halaman Review ada tombol **📄 Buat PDF Review**. Aplikasi menyusun laporan rapi berisi judul,
+nama, bulan, tanggal cetak, vonis, angka utama, **grafik pemasukan vs pengeluaran**, rincian 6 bulan,
+batas vs realisasi, 5 pengeluaran terbesar, dan catatan kesepakatan — tanpa tombol atau menu.
+
+Saat dialog cetak muncul, pilih tujuan **"Simpan sebagai PDF"**:
+- **Android (Chrome):** pada pilihan tujuan/printer, pilih *Save as PDF* → **Simpan**.
+- **iPhone (Safari):** di pratinjau cetak, cubit-perbesar halamannya, lalu tekan tombol Bagikan ⬆️ →
+  *Simpan ke File* atau kirim langsung lewat WhatsApp/email.
+
+Hasilnya bisa kalian simpan sebagai arsip bulanan atau dikirim ke pasangan.
 
 ## 5. Sinkronisasi 2 HP (sekali pasang, ±5 menit)
 
@@ -168,7 +196,7 @@ Catat satu pengeluaran di HP pertama → dalam ±2 detik muncul di HP kedua dise
 | Hal | Penjelasan |
 |---|---|
 | Butuh internet? | Hanya untuk sinkron. Tanpa internet aplikasi tetap jalan (tersimpan lokal) dan otomatis menyusul terkirim saat online. |
-| Apa saja yang tersinkron | Transaksi kalian berdua, kategori, batas pengeluaran masing-masing, nama kalian, dan catatan review. Pilihan "HP ini dipakai oleh" tetap per-HP. |
+| Apa saja yang tersinkron | Transaksi kalian berdua, kategori, batas pengeluaran masing-masing, nama kalian, catatan review, dan PIN (dalam bentuk teracak) sehingga berlaku sama di kedua HP. Pilihan "HP ini dipakai oleh" tetap per-HP. |
 | Tampilan | Selalu satu orang pada satu waktu. Pengalih di atas layar untuk berganti orang; aplikasi selalu terbuka pada pemilik HP itu. |
 | Menghapus transaksi | Terhapus di kedua HP. |
 | "Hapus SEMUA data" | Juga membersihkan data di cloud (HP pasangan ikut kosong) — hati-hati. |
@@ -178,13 +206,13 @@ Catat satu pengeluaran di HP pertama → dalam ±2 detik muncul di HP kedua dise
 
 ## 7. Tampilan Aplikasi
 
-| Beranda | Riwayat |
-|---|---|
-| ![Beranda](screenshots/shot-keuangan-beranda.png) | ![Riwayat](screenshots/shot-keuangan-riwayat.png) |
+| Beranda | Riwayat | Kunci Pribadi |
+|---|---|---|
+| ![Beranda](screenshots/shot-keuangan-beranda.png) | ![Riwayat](screenshots/shot-keuangan-riwayat.png) | ![Kunci](screenshots/shot-keuangan-kunci.png) |
 
-| Catat Transaksi | Review Bulanan |
-|---|---|
-| ![Catat](screenshots/shot-keuangan-catat.png) | ![Review](screenshots/shot-keuangan-review.png) |
+| Batas Pengeluaran | Grafik Review | Hasil PDF |
+|---|---|---|
+| ![Batas](screenshots/shot-keuangan-batas.png) | ![Grafik](screenshots/shot-keuangan-grafik.png) | ![PDF](screenshots/shot-keuangan-pdf.png) |
 
 ## 8. Pemecahan Masalah
 
