@@ -2,7 +2,7 @@
    di layar HP dan tetap berjalan tanpa internet.
    Halaman: network-first (update langsung terlihat saat online,
    cache dipakai saat offline). Aset lain: cache-first. */
-const CACHE = 'keuangan-berdua-v1';
+const CACHE = 'keuangan-berdua-v2';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
