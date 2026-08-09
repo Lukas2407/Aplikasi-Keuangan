@@ -1,8 +1,9 @@
 # £ Keuangan Berdua — Catatan Keuangan Bulanan untuk 2 Orang, 2 HP
 
-Aplikasi HP (PWA) untuk mencatat keuangan bulanan **berdua**: setiap pemasukan/pengeluaran yang
-dicatat salah satu orang **langsung muncul di HP pasangan** (real-time), dalam **poundsterling (£)**,
-lengkap dengan anggaran per kategori dan **review keuangan setiap bulan**.
+Aplikasi HP (PWA) untuk mencatat keuangan bulanan **berdua**, dalam **poundsterling (£)**.
+Setiap layar menampilkan **keuangan satu orang saja** supaya angkanya tidak tercampur, sementara
+datanya **tersinkron real-time** antar HP — ketuk nama pasangan di pengalih atas untuk melihat
+perkembangannya. Lengkap dengan anggaran per orang dan **review keuangan setiap bulan**.
 
 ## 📲 Buka & Pasang di HP
 
@@ -17,11 +18,12 @@ lengkap dengan anggaran per kategori dan **review keuangan setiap bulan**.
 
 ## ✨ Fitur
 
-- **➕ Catat cepat** — pengeluaran/pemasukan, nominal £ (mendukung pence), kategori, tanggal, siapa yang mencatat, catatan.
-- **👥 Dua orang, dua HP** — tiap catatan berlabel pencatatnya; Beranda menampilkan kontribusi masing-masing; sinkronisasi real-time lewat Firebase gratis milik sendiri.
-- **🎯 Anggaran per kategori** — bilah kemajuan menguning mendekati batas, memerah saat terlampaui.
-- **📈 Review setiap bulan** — pengingat otomatis di awal bulan, vonis kesehatan keuangan, perbandingan vs bulan lalu, rapor per orang, anggaran vs realisasi, 5 pengeluaran terbesar, catatan kesepakatan yang ikut tersinkron, dan tanda ✅ review selesai.
-- **📊 Perkembangan 6 bulan** — tren pengeluaran kalian berdua berdampingan, untuk saling memantau progress.
+- **➕ Catat cepat** — pengeluaran/pemasukan, nominal £ (mendukung pence), kategori, tanggal, catatan. Transaksi masuk ke catatan orang yang sedang ditampilkan.
+- **👤 Tampilan per orang** — Beranda, Riwayat, dan Review hanya menampilkan satu orang; aplikasi terbuka pada pemilik HP itu, dan pengalih di atas untuk melihat pasangan.
+- **☁️ Dua HP tetap satu data** — sinkronisasi real-time lewat Firebase gratis milik sendiri.
+- **🎯 Anggaran per orang** — tiap orang punya batas sendiri di kategori yang sama; bilah menguning mendekati batas, memerah saat terlampaui.
+- **📈 Review setiap bulan** — pengingat otomatis di awal bulan, vonis kesehatan keuangan, perbandingan vs bulan lalu, anggaran vs realisasi, 5 pengeluaran terbesar, dan catatan kesepakatan bersama yang ikut tersinkron.
+- **📊 Perkembangan 6 bulan** — tren pengeluaran orang yang sedang dilihat, untuk memantau progress masing-masing.
 - **💾 Aman** — data tersimpan di HP (offline tetap jalan), ekspor/impor JSON untuk cadangan.
 
 | Beranda | Riwayat | Review |

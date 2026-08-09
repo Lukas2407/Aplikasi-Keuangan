@@ -66,13 +66,6 @@ hr.sep{border:0; border-top:1px solid var(--line); margin:10px 0}
 .sum.net.minus{background:linear-gradient(135deg,#b3383d,#e5484d)}
 .sum.net .v{font-size:21px}
 /* person chips */
-.pgrid{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-.pcard{border-radius:14px; padding:10px 12px; border:1px solid var(--line)}
-.pcard.a{background:var(--a-soft)} .pcard.b{background:var(--b-soft)}
-.pname{font-weight:700; font-size:13px; display:flex; align-items:center; gap:6px}
-.pdot{width:9px; height:9px; border-radius:50%}
-.pcard.a .pdot{background:var(--a)} .pcard.b .pdot{background:var(--b)}
-.pcard .row{display:flex; justify-content:space-between; margin-top:4px; font-size:12.5px}
 /* banner */
 .banner{
   background:#fff7e8; border:1px solid #f2d8a7; border-radius:var(--r); padding:12px 14px;
@@ -99,8 +92,6 @@ hr.sep{border:0; border-top:1px solid var(--line); margin:10px 0}
 .tmid .s{font-size:12px; color:var(--mut); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .tamt{font-weight:700; font-size:14px; white-space:nowrap}
 .tamt.in{color:var(--in)} .tamt.out{color:var(--out)}
-.who{display:inline-block; padding:1px 7px; border-radius:99px; font-size:10.5px; font-weight:700; vertical-align:1px}
-.who.a{background:var(--a-soft); color:var(--a)} .who.b{background:var(--b-soft); color:var(--b)}
 /* chips & filters */
 .chips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px}
 .chip{
@@ -133,6 +124,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--pri); background:#fff
 .seg button{flex:1; border:0; background:transparent; padding:9px 6px; border-radius:10px; font-size:13.5px; font-weight:700; color:var(--mut)}
 .seg button.on{background:#fff; color:var(--ink); box-shadow:0 1px 4px rgba(0,0,0,.12)}
 .seg button.on.tin{color:var(--in)} .seg button.on.tout{color:var(--out)}
+.persw{margin-bottom:10px}
+.persw button.on.pa{color:var(--a); box-shadow:0 1px 4px rgba(0,0,0,.12), inset 0 -2px 0 var(--a)}
+.persw button.on.pb{color:var(--b); box-shadow:0 1px 4px rgba(0,0,0,.12), inset 0 -2px 0 var(--b)}
+.owner{border-radius:12px; padding:9px 12px; font-size:12.5px; margin-bottom:10px}
+.owner.a{background:var(--a-soft); color:var(--a)} .owner.b{background:var(--b-soft); color:var(--b)}
 /* category picker grid */
 .catgrid{display:grid; grid-template-columns:repeat(4,1fr); gap:8px}
 .catopt{border:1.5px solid var(--line); background:#fbfbfe; border-radius:13px; padding:8px 4px; text-align:center; cursor:pointer}
@@ -299,25 +295,41 @@ const nameOf=w=>w==='b'?(S.settings.nameB||'Orang 2'):(S.settings.nameA||'Orang 
 const cat=id=>S.categories.find(c=>c.id===id)||{id, name:'(kategori terhapus)', icon:'❓', type:'out', budget:0};
 
 /* ---------- kalkulasi bulanan ---------- */
-const txMonth=k=>S.tx.filter(t=>(t.date||'').slice(0,7)===k);
-function sums(k){
-  const r={inn:0,out:0,net:0,count:0,byWho:{a:{in:0,out:0},b:{in:0,out:0}},byCatOut:{},byCatIn:{}};
-  for(const t of txMonth(k)){
-    const w=t.who==='b'?'b':'a', a=Number(t.amount)||0;
+const whoOf=t=>t.who==='b'?'b':'a';
+/* Tampilan selalu satu orang: setiap hitungan disaring untuk orang yang
+   sedang dilihat (UI.who). Data tetap satu dan tersinkron antar HP. */
+const txMonth=(k,who)=>S.tx.filter(t=>(t.date||'').slice(0,7)===k && (!who||whoOf(t)===who));
+function sums(k,who){
+  const r={inn:0,out:0,net:0,count:0,byCatOut:{},byCatIn:{}};
+  for(const t of txMonth(k,who)){
+    const a=Number(t.amount)||0;
     r.count++;
-    if(t.type==='in'){ r.inn+=a; r.byWho[w].in+=a; r.byCatIn[t.catId]=(r.byCatIn[t.catId]||0)+a; }
-    else{ r.out+=a; r.byWho[w].out+=a; r.byCatOut[t.catId]=(r.byCatOut[t.catId]||0)+a; }
+    if(t.type==='in'){ r.inn+=a; r.byCatIn[t.catId]=(r.byCatIn[t.catId]||0)+a; }
+    else{ r.out+=a; r.byCatOut[t.catId]=(r.byCatOut[t.catId]||0)+a; }
   }
   r.net=r.inn-r.out;
   return r;
 }
+/* Anggaran disimpan per orang: {a:…, b:…}. Nilai lama berupa angka
+   tunggal tetap terbaca sebagai anggaran yang sama untuk keduanya. */
+const budgetOf=(c,who)=>{const b=c&&c.budget; return typeof b==='object'&&b?(Number(b[who])||0):(Number(b)||0);};
+function setBudgetOf(c,who,v){
+  if(typeof c.budget!=='object'||!c.budget){const old=Number(c.budget)||0; c.budget={a:old,b:old};}
+  c.budget[who]=v;
+}
 
 /* ---------- state UI ---------- */
-const UI={ tab:'home', month:mkeyNow(), f:{who:'all', type:'all', cat:'all', q:''} };
+const UI={ tab:'home', month:mkeyNow(), who:'a', f:{type:'all', cat:'all', q:''} };
 window.go=t=>{ UI.tab=t; render(); window.scrollTo(0,0); };
 window.chMonth=d=>{ UI.month=mAdd(UI.month,d); render(); };
 window.goReview=k=>{ UI.month=k; go('review'); };
+window.setWho=w=>{ UI.who=w; render(); window.scrollTo(0,0); };
 const monthSel=()=>`<div class="msel"><button class="mbtn" onclick="chMonth(-1)">‹</button><div class="mlab">${esc(mLabel(UI.month))}</div><button class="mbtn" onclick="chMonth(1)">›</button></div>`;
+/* pengalih orang — hanya satu orang yang datanya tampil pada satu waktu */
+const personSel=()=>`<div class="seg persw">
+  ${['a','b'].map(w=>`<button class="${UI.who===w?'on p'+w:''}" onclick="setWho('${w}')">${esc(nameOf(w))}${L.me===w?' · Saya':''}</button>`).join('')}
+</div>`;
+const viewedLabel=()=>UI.who===L.me?'Keuanganmu':'Keuangan '+nameOf(UI.who);
 
 /* =====================================================================
    RENDER
@@ -333,41 +345,34 @@ function render(){
 
 /* ---------- Beranda ---------- */
 function vHome(){
-  const k=UI.month, s=sums(k);
+  const k=UI.month, w=UI.who, s=sums(k,w), mine=w===L.me;
   let h='';
   // pengingat review bulan lalu
   const prev=mAdd(mkeyNow(),-1);
-  if(txMonth(prev).length && !(S.reviews[prev]&&S.reviews[prev].done)){
+  if(txMonth(prev,w).length && !(S.reviews[prev]&&S.reviews[prev].done)){
     h+=`<div class="banner"><span style="font-size:22px">📅</span>
-      <div class="bt"><b>Waktunya review bulanan!</b><br><span class="mut small">Keuangan ${esc(mLabel(prev))} belum direview berdua.</span></div>
+      <div class="bt"><b>Waktunya review bulanan!</b><br><span class="mut small">Keuangan ${esc(mLabel(prev))} belum direview.</span></div>
       <button class="btn sm" onclick="goReview('${prev}')">Mulai</button></div>`;
   }
-  h+=`<div class="small mut" style="margin:2px 2px 8px">Halo, <b>${esc(nameOf(L.me))}</b> 👋</div>`;
+  h+=personSel();
+  h+=`<div class="small mut" style="margin:2px 2px 8px">${mine?`Halo, <b>${esc(nameOf(w))}</b> 👋`:`Kamu sedang melihat catatan <b>${esc(nameOf(w))}</b> 👀`}</div>`;
   h+=monthSel();
   h+=`<div class="sumgrid">
     <div class="sum in"><div class="t">Pemasukan</div><div class="v">${rp(s.inn)}</div></div>
     <div class="sum out"><div class="t">Pengeluaran</div><div class="v">${rp(s.out)}</div></div>
     <div class="sum net ${s.net<0?'minus':''}"><div><div class="t">Sisa bulan ini</div><div class="v">${rpS(s.net)}</div></div><div style="font-size:30px">${s.net<0?'😰':'💰'}</div></div>
   </div>`;
-  // per orang
-  h+=`<div class="card" style="margin-top:12px"><h2>👥 Kontribusi Berdua</h2><div class="pgrid">
-    ${['a','b'].map(w=>`<div class="pcard ${w}">
-      <div class="pname"><span class="pdot"></span>${esc(nameOf(w))}</div>
-      <div class="row"><span class="mut">Masuk</span><b style="color:var(--in)">${rp(s.byWho[w].in)}</b></div>
-      <div class="row"><span class="mut">Keluar</span><b style="color:var(--out)">${rp(s.byWho[w].out)}</b></div>
-    </div>`).join('')}
-  </div></div>`;
   // pengeluaran per kategori + anggaran
   const rows=S.categories.filter(c=>c.type==='out').map(c=>({c, spent:s.byCatOut[c.id]||0}))
-    .filter(x=>x.spent>0 || (x.c.budget||0)>0).sort((x,y)=>y.spent-x.spent);
+    .filter(x=>x.spent>0 || budgetOf(x.c,w)>0).sort((x,y)=>y.spent-x.spent);
   const orphan=Object.keys(s.byCatOut).filter(id=>!S.categories.some(c=>c.id===id));
   for(const id of orphan) rows.push({c:cat(id), spent:s.byCatOut[id]});
-  h+=`<div class="card"><h2>📊 Pengeluaran per Kategori</h2>`;
+  h+=`<div class="card" style="margin-top:12px"><h2>📊 Pengeluaran per Kategori</h2>`;
   if(!rows.length) h+=`<div class="empty"><div class="e">🌱</div>Belum ada pengeluaran bulan ini.<br><span class="tiny">Atur anggaran per kategori di menu <b>Atur → Kategori</b>.</span></div>`;
   else{
-    const mx=Math.max(...rows.map(x=>Math.max(x.spent, x.c.budget||0)),1);
+    const mx=Math.max(...rows.map(x=>Math.max(x.spent, budgetOf(x.c,w))),1);
     for(const {c,spent} of rows){
-      const b=c.budget||0, pct=b>0?spent/b:spent/mx;
+      const b=budgetOf(c,w), pct=b>0?spent/b:spent/mx;
       const cls=b>0?(spent>b?'over':(spent>b*.8?'warn':'')):'';
       h+=`<div class="crow"><div class="top"><span>${c.icon} ${esc(c.name)}</span><b>${rp(spent)}${b>0?`<span class="mut tiny"> / ${rp(b)}</span>`:''}</b></div>
       <div class="bar"><i class="${cls}" style="width:${Math.min(100,Math.round(pct*100))}%"></i></div>
@@ -376,7 +381,7 @@ function vHome(){
   }
   h+=`</div>`;
   // transaksi terakhir
-  const recent=txMonth(k).slice().sort((a,b)=>b.date.localeCompare(a.date)||((b.at||0)-(a.at||0))).slice(0,5);
+  const recent=txMonth(k,w).slice().sort((a,b)=>b.date.localeCompare(a.date)||((b.at||0)-(a.at||0))).slice(0,5);
   h+=`<div class="card"><h2>🕐 Transaksi Terakhir <button class="btn ghost sm" style="margin-left:auto" onclick="go('hist')">Lihat semua</button></h2>`;
   if(!recent.length){
     h+=`<div class="empty"><div class="e">📝</div>Belum ada catatan di ${esc(mLabel(k))}.<br><br>
@@ -387,10 +392,10 @@ function vHome(){
   return h;
 }
 function txRow(t){
-  const c=cat(t.catId), w=t.who==='b'?'b':'a';
+  const c=cat(t.catId);
   return `<div class="trow" onclick="openTx('${esc(t.id)}')">
     <div class="tic">${c.icon}</div>
-    <div class="tmid"><div class="n">${esc(c.name)} <span class="who ${w}">${esc(nameOf(w))}</span></div>
+    <div class="tmid"><div class="n">${esc(c.name)}</div>
     <div class="s">${esc(t.note||dLabel(t.date))}</div></div>
     <div class="tamt ${t.type}">${t.type==='in'?'+':'−'}${rp(t.amount)}</div></div>`;
 }
@@ -399,12 +404,10 @@ function txRow(t){
 window.setF=(key,val)=>{ UI.f[key]=val; render(); };
 window.setQ=el=>{ UI.f.q=el.value; drawHistList(); };
 function vHist(){
-  const s=sums(UI.month);
-  let h=monthSel();
+  const s=sums(UI.month,UI.who);
+  let h=personSel()+monthSel();
   h+=`<div class="chips">
-    <button class="chip ${UI.f.who==='all'?'on':''}" onclick="setF('who','all')">Semua</button>
-    <button class="chip ${UI.f.who==='a'?'on':''}" onclick="setF('who','a')">${esc(nameOf('a'))}</button>
-    <button class="chip ${UI.f.who==='b'?'on':''}" onclick="setF('who','b')">${esc(nameOf('b'))}</button>
+    <button class="chip ${UI.f.type==='all'?'on':''}" onclick="setF('type','all')">Semua</button>
     <button class="chip ${UI.f.type==='in'?'on':''}" onclick="setF('type', UI.f.type==='in'?'all':'in')">💚 Masuk</button>
     <button class="chip ${UI.f.type==='out'?'on':''}" onclick="setF('type', UI.f.type==='out'?'all':'out')">❤️ Keluar</button>
   </div>
@@ -417,8 +420,7 @@ function vHist(){
 function drawHistList(){
   const el=$('#histList'); if(!el) return;
   const q=UI.f.q.trim().toLowerCase();
-  let list=txMonth(UI.month).filter(t=>
-    (UI.f.who==='all'||((t.who==='b'?'b':'a')===UI.f.who)) &&
+  let list=txMonth(UI.month,UI.who).filter(t=>
     (UI.f.type==='all'||t.type===UI.f.type) &&
     (!q || (t.note||'').toLowerCase().includes(q) || cat(t.catId).name.toLowerCase().includes(q))
   ).sort((a,b)=>b.date.localeCompare(a.date)||((b.at||0)-(a.at||0)));
@@ -447,26 +449,27 @@ function deltaBadge(d,goodWhenDown){
   return `<span class="delta ${good?'down':'up'}">${up?'▲':'▼'} ${Math.abs(d)}%</span>`;
 }
 function vReview(){
-  const k=UI.month, s=sums(k), sp=sums(mAdd(k,-1));
+  const k=UI.month, w=UI.who, s=sums(k,w), sp=sums(mAdd(k,-1),w), mine=w===L.me;
   const rv=S.reviews[k]||{};
-  let h=`<div class="small mut" style="margin:2px 2px 8px">📋 Review keuangan bulanan — lakukan berdua setiap awal bulan untuk bulan sebelumnya.</div>`;
-  h+=monthSel();
+  let h=`<div class="small mut" style="margin:2px 2px 8px">📋 Review bulanan ${esc(nameOf(w))} — lihat rapor masing-masing, lalu tulis kesepakatan bersama di bawah.</div>`;
+  h+=personSel()+monthSel();
   // riwayat 6 bulan
   h+=`<div class="mhist" style="margin-bottom:12px">`+
     [...Array(6)].map((_,i)=>{const mk=mAdd(mkeyNow(),-(5-i)); const done=S.reviews[mk]&&S.reviews[mk].done;
       return `<button class="${done?'done':''} ${mk===k?'cur':''}" onclick="goReview('${mk}')">${done?'✅ ':''}${esc(mShort(mk))}</button>`;}).join('')+`</div>`;
   if(!s.count){
-    h+=`<div class="card"><div class="empty"><div class="e">🗓️</div>Belum ada transaksi di ${esc(mLabel(k))},<br>jadi belum ada yang bisa direview.</div></div>`;
+    h+=`<div class="card"><div class="empty"><div class="e">🗓️</div>${esc(nameOf(w))} belum punya transaksi di ${esc(mLabel(k))},<br>jadi belum ada yang bisa direview.</div></div>`;
     return h;
   }
   // vonis kesehatan keuangan
   const rate=s.inn>0?Math.round(s.net/s.inn*100):null;
+  const you=mine?'Kamu':esc(nameOf(w));
   let cls='ok', icon='🙂', txt;
   if(s.net<0){ cls='bad'; icon='🚨'; txt=`Defisit ${rp(s.net)} — pengeluaran melebihi pemasukan.`; }
-  else if(rate!==null&&rate>=20){ cls='good'; icon='💚'; txt=`Hebat! Kalian menyisakan ${rate}% dari pemasukan (${rp(s.net)}).`; }
+  else if(rate!==null&&rate>=20){ cls='good'; icon='💚'; txt=`Hebat! ${you} menyisakan ${rate}% dari pemasukan (${rp(s.net)}).`; }
   else txt=`Sisa ${rpS(s.net)}${rate!==null?` (${rate}% dari pemasukan)`:''} — masih bisa ditingkatkan.`;
   h+=`<div class="verdict ${cls}"><div style="font-size:26px">${icon}</div><div class="big">${txt}</div>
-    <div class="small" style="opacity:.9;margin-top:4px">${s.count} transaksi tercatat di ${esc(mLabel(k))}</div></div>`;
+    <div class="small" style="opacity:.9;margin-top:4px">${s.count} transaksi ${esc(nameOf(w))} di ${esc(mLabel(k))}</div></div>`;
   // angka utama + perbandingan bulan lalu
   h+=`<div class="stat2">
     <div class="stat"><div class="t">PEMASUKAN</div><div class="v" style="color:var(--in)">${rp(s.inn)}</div>${deltaBadge(pctDelta(s.inn,sp.inn),false)}</div>
@@ -474,49 +477,38 @@ function vReview(){
     <div class="stat"><div class="t">RATA-RATA / HARI</div><div class="v">${rp(s.out/daysInMonth(k))}</div><span class="tiny mut">pengeluaran</span></div>
     <div class="stat"><div class="t">BULAN LALU (${esc(mShort(mAdd(k,-1)))})</div><div class="v">${rpS(sp.net)}</div><span class="tiny mut">sisa</span></div>
   </div>`;
-  // per orang
-  h+=`<div class="card"><h2>👥 Rapor per Orang</h2><div class="pgrid">
-    ${['a','b'].map(w=>{const p=s.byWho[w]; return `<div class="pcard ${w}">
-      <div class="pname"><span class="pdot"></span>${esc(nameOf(w))}</div>
-      <div class="row"><span class="mut">Masuk</span><b style="color:var(--in)">${rp(p.in)}</b></div>
-      <div class="row"><span class="mut">Keluar</span><b style="color:var(--out)">${rp(p.out)}</b></div>
-      <div class="row"><span class="mut">Selisih</span><b>${rpS(p.in-p.out)}</b></div></div>`;}).join('')}
-  </div></div>`;
-  // perkembangan 6 bulan per orang
+  // perkembangan 6 bulan orang ini
   const mks=[...Array(6)].map((_,i)=>mAdd(k,-(5-i)));
-  const msums=mks.map(m=>({m, s:sums(m)}));
+  const msums=mks.map(m=>({m, s:sums(m,w)}));
   if(msums.some(x=>x.s.count)){
-    const maxOut=Math.max(...msums.map(x=>Math.max(x.s.byWho.a.out, x.s.byWho.b.out)), 1);
-    h+=`<div class="card"><h2>📊 Perkembangan 6 Bulan</h2>
-      <div class="tiny mut" style="margin-bottom:8px">Pengeluaran per orang tiap bulan —
-        <span style="color:var(--a)">●</span> ${esc(nameOf('a'))} &nbsp;
-        <span style="color:var(--b)">●</span> ${esc(nameOf('b'))}</div>`;
+    const maxOut=Math.max(...msums.map(x=>x.s.out), 1);
+    h+=`<div class="card"><h2>📈 Perkembangan 6 Bulan ${esc(nameOf(w))}</h2>
+      <div class="tiny mut" style="margin-bottom:8px">Pengeluaran tiap bulan, dibanding bulan tertinggi.</div>`;
     for(const {m, s:s2} of msums){
       if(!s2.count){ h+=`<div class="crow"><div class="top"><span class="mut">${esc(mShort(m))}</span><span class="tiny mut">belum ada catatan</span></div></div>`; continue; }
       h+=`<div class="crow"><div class="top"><span><b>${esc(mShort(m))}</b>${m===k?' <span class="tiny" style="color:var(--pri)">◀ bulan ini</span>':''}</span>
         <b style="color:${s2.net<0?'var(--out)':'var(--in)'}">${s2.net<0?'−':'+'}${rp(s2.net)}</b></div>
-        <div class="bar" style="margin-top:6px"><i style="width:${Math.round(s2.byWho.a.out/maxOut*100)}%;background:var(--a)"></i></div>
-        <div class="bar" style="margin-top:3px"><i style="width:${Math.round(s2.byWho.b.out/maxOut*100)}%;background:var(--b)"></i></div>
-        <div class="tiny mut" style="margin-top:3px">${esc(nameOf('a'))} ${rp(s2.byWho.a.out)} · ${esc(nameOf('b'))} ${rp(s2.byWho.b.out)}</div></div>`;
+        <div class="bar" style="margin-top:6px"><i style="width:${Math.round(s2.out/maxOut*100)}%;background:var(--${w})"></i></div>
+        <div class="tiny mut" style="margin-top:3px">keluar ${rp(s2.out)} · masuk ${rp(s2.inn)}</div></div>`;
     }
     h+=`</div>`;
   }
   // anggaran vs realisasi
-  const brows=S.categories.filter(c=>c.type==='out'&&((c.budget||0)>0||(s.byCatOut[c.id]||0)>0))
+  const brows=S.categories.filter(c=>c.type==='out'&&(budgetOf(c,w)>0||(s.byCatOut[c.id]||0)>0))
     .map(c=>({c,spent:s.byCatOut[c.id]||0})).sort((x,y)=>y.spent-x.spent);
   if(brows.length){
     h+=`<div class="card"><h2>🎯 Anggaran vs Realisasi</h2>`;
     for(const {c,spent} of brows){
-      const b=c.budget||0;
+      const b=budgetOf(c,w);
       const st=b>0?(spent<=b?'✅':'❌'):'·';
       h+=`<div class="crow"><div class="top"><span>${st} ${c.icon} ${esc(c.name)}</span>
         <b>${rp(spent)}${b>0?`<span class="mut tiny"> / ${rp(b)}</span>`:''}</b></div>
         ${b>0?`<div class="bar"><i class="${spent>b?'over':(spent>b*.8?'warn':'')}" style="width:${Math.min(100,Math.round(spent/b*100))}%"></i></div>`:''}</div>`;
     }
-    h+=`<div class="tiny mut" style="margin-top:8px">Atur angka anggaran per kategori lewat <b>Atur → Kategori & Anggaran</b>.</div></div>`;
+    h+=`<div class="tiny mut" style="margin-top:8px">Anggaran ini milik ${esc(nameOf(w))} sendiri — atur lewat <b>Atur → Kategori & Anggaran</b>.</div></div>`;
   }
   // 5 pengeluaran terbesar
-  const top=txMonth(k).filter(t=>t.type==='out').sort((a,b)=>(b.amount||0)-(a.amount||0)).slice(0,5);
+  const top=txMonth(k,w).filter(t=>t.type==='out').sort((a,b)=>(b.amount||0)-(a.amount||0)).slice(0,5);
   if(top.length){
     h+=`<div class="card"><h2>🔥 5 Pengeluaran Terbesar</h2>${top.map(txRow).join('')}</div>`;
   }
@@ -548,7 +540,7 @@ function vSet(){
   const sy=S.settings.sync||{};
   const catRows=t=>S.categories.filter(c=>c.type===t).map(c=>`
     <div class="srow"><span style="font-size:19px">${c.icon}</span>
-      <div class="n">${esc(c.name)}${t==='out'?`<div class="b">Anggaran: ${c.budget>0?rp(c.budget)+'/bulan':'belum diatur'}</div>`:''}</div>
+      <div class="n">${esc(c.name)}${t==='out'?`<div class="b">Anggaran ${esc(nameOf(UI.who))}: ${budgetOf(c,UI.who)>0?rp(budgetOf(c,UI.who))+'/bulan':'belum diatur'}</div>`:''}</div>
       <button class="iconbtn" onclick="openCat('${esc(c.id)}')">✏️</button></div>`).join('');
   return `
   <div class="card"><h2>👥 Profil Berdua</h2>
@@ -573,6 +565,7 @@ function vSet(){
   </div>
 
   <div class="card"><h2>🏷️ Kategori & Anggaran</h2>
+    <div class="small mut" style="margin-bottom:8px">Anggaran yang ditampilkan milik <b>${esc(nameOf(UI.who))}</b>. Ganti orangnya di Beranda untuk mengatur milik satunya.</div>
     <div class="small mut" style="margin-bottom:6px">Pengeluaran</div>${catRows('out')}
     <div class="small mut" style="margin:12px 0 6px">Pemasukan</div>${catRows('in')}
     <div style="margin-top:12px"><button class="btn ghost" onclick="openCat()">➕ Tambah kategori</button></div>
@@ -625,7 +618,7 @@ window.saveNames=()=>{
   S.settings.nameB=$('#setNameB').value.trim()||'Orang 2';
   save(); queueSync('settings'); render();
 };
-window.setMe=w=>{ L.me=w; saveL(); render(); toast('HP ini sekarang milik '+nameOf(w)); };
+window.setMe=w=>{ L.me=w; UI.who=w; saveL(); render(); toast('HP ini sekarang milik '+nameOf(w)); };
 window.setCur=c=>{ S.settings.currency=c; save(); queueSync('settings'); render(); toast('Mata uang: '+(c==='IDR'?'Rupiah (Rp)':'Poundsterling (£)')); };
 const appUrl=()=>location.href.split('#')[0].split('?')[0];
 window.shareApp=async()=>{
@@ -650,7 +643,7 @@ window.openTx=id=>{
   MT.id=t?t.id:null;
   MT.type=t?t.type:'out';
   MT.catId=t?t.catId:'';
-  MT.who=t?(t.who==='b'?'b':'a'):L.me;
+  MT.who=t?whoOf(t):UI.who;
   MT.date=t?t.date:todayStr();
   MT.amount=t?t.amount:'';
   MT.note=t?(t.note||''):'';
@@ -667,14 +660,8 @@ function drawTxModal(){
   <div class="field"><input id="mtAmt" class="amount" inputmode="${cur().dec?'decimal':'numeric'}" placeholder="${cur().sym.trim()} 0"
     value="${amtStr(MT.amount)}" oninput="fmtAmt(this)"></div>
   <div class="field"><label>Kategori</label><div class="catgrid" id="mtCats"></div></div>
-  <div class="grid2">
-    <div class="field"><label>Tanggal</label><input type="date" id="mtDate" value="${esc(MT.date)}"></div>
-    <div class="field"><label>Oleh siapa</label>
-      <div class="seg">
-        <button class="${MT.who==='a'?'on':''}" onclick="mtWho('a')">${esc(nameOf('a'))}</button>
-        <button class="${MT.who==='b'?'on':''}" onclick="mtWho('b')">${esc(nameOf('b'))}</button>
-      </div></div>
-  </div>
+  <div class="field"><label>Tanggal</label><input type="date" id="mtDate" value="${esc(MT.date)}"></div>
+  <div class="owner ${MT.who}">Masuk ke catatan <b>${esc(nameOf(MT.who))}</b>${MT.who===L.me?' (kamu)':''}</div>
   <div class="field"><label>Catatan (opsional)</label><input id="mtNote" value="${esc(MT.note)}" placeholder="cth: belanja mingguan, bensin, listrik…"></div>
   <button class="btn" onclick="saveTx()">💾 Simpan</button>
   ${MT.id?`<button class="btn danger" style="margin-top:8px" onclick="delTx('${esc(MT.id)}')">🗑️ Hapus transaksi ini</button>`:''}`;
@@ -688,7 +675,6 @@ function drawMtCats(){
       <div class="i">${c.icon}</div><div class="n">${esc(c.name)}</div></div>`).join('');
 }
 window.mtType=t=>{ MT.type=t; keepMt(); drawTxModal(); };
-window.mtWho=w=>{ MT.who=w; keepMt(); drawTxModal(); };
 window.mtCat=id=>{ MT.catId=id; drawMtCats(); };
 function keepMt(){ MT.amount=num($('#mtAmt').value); MT.date=$('#mtDate').value; MT.note=$('#mtNote').value; }
 window.fmtAmt=el=>{
@@ -716,7 +702,7 @@ window.saveTx=()=>{
   if(i>=0) S.tx[i]=t; else S.tx.push(t);
   save(); pushTxCloud(t);
   closeModal();
-  UI.month=date.slice(0,7);
+  UI.month=date.slice(0,7); UI.who=t.who;
   render();
   toast(t.type==='in'?'💰 Pemasukan dicatat!':'💸 Pengeluaran dicatat!');
 };
@@ -746,8 +732,9 @@ function drawCatModal(c){
     <div class="field"><label>Emoji ikon</label><input id="mcIcon" value="${esc(c?c.icon:'🏷️')}" maxlength="4"></div>
     <div class="field"><label>Nama kategori</label><input id="mcName" value="${esc(c?c.name:'')}" placeholder="cth: Kopi & Nongkrong"></div>
   </div>
-  <div class="field" style="${MC.type==='in'?'display:none':''}"><label>Anggaran per bulan (${cur().sym.trim()}, kosong = tanpa anggaran)</label>
-    <input id="mcBud" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(c?c.budget:0)}" placeholder="${cur().dec?'cth: 1,500':'cth: 1.500.000'}" oninput="fmtAmt(this)"></div>
+  <div class="field" style="${MC.type==='in'?'display:none':''}"><label>Anggaran ${esc(nameOf(UI.who))} per bulan (${cur().sym.trim()}, kosong = tanpa anggaran)</label>
+    <input id="mcBud" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(c?budgetOf(c,UI.who):0)}" placeholder="${cur().dec?'cth: 1,500':'cth: 1.500.000'}" oninput="fmtAmt(this)">
+    <div class="tiny mut" style="margin-top:5px">Anggaran dihitung per orang. Untuk mengatur milik ${esc(nameOf(UI.who==='a'?'b':'a'))}, ganti dulu orangnya di Beranda.</div></div>
   <button class="btn" onclick="saveCat()">💾 Simpan</button>
   ${c?`<button class="btn danger" style="margin-top:8px" onclick="delCat('${esc(c.id)}')" ${used?'disabled title="Masih dipakai transaksi"':''}>🗑️ Hapus kategori${used?' (masih dipakai transaksi)':''}</button>`:''}`;
 }
@@ -761,8 +748,12 @@ window.saveCat=()=>{
   if(!name) return toast('Isi nama kategorinya dulu.');
   const icon=$('#mcIcon').value.trim()||'🏷️';
   const budget=MC.type==='out'?num($('#mcBud')?$('#mcBud').value:0):0;
-  if(MC.id){ const c=S.categories.find(x=>x.id===MC.id); if(c){ c.name=name; c.icon=icon; c.budget=budget; } }
-  else S.categories.push({id:'c'+Date.now().toString(36)+rid(3), name, icon, type:MC.type, budget});
+  if(MC.id){ const c=S.categories.find(x=>x.id===MC.id); if(c){ c.name=name; c.icon=icon; setBudgetOf(c,UI.who,budget); } }
+  else{
+    const c={id:'c'+Date.now().toString(36)+rid(3), name, icon, type:MC.type, budget:{a:0,b:0}};
+    c.budget[UI.who]=budget;
+    S.categories.push(c);
+  }
   save(); queueSync('categories');
   closeModal(); render(); toast('🏷️ Kategori disimpan.');
 };
@@ -803,7 +794,7 @@ window.fsDone=()=>{
   const a=$('#fsA').value.trim(), b=$('#fsB').value.trim();
   if(a) S.settings.nameA=a;
   if(b) S.settings.nameB=b;
-  L.setupDone=true;
+  L.setupDone=true; UI.who=L.me;
   save(); saveL(); queueSync('settings');
   closeModal(); render();
   toast('Selamat mencatat, '+nameOf(L.me)+'! 🎉');
@@ -1015,9 +1006,13 @@ window.fillDemo=()=>{
   ].filter(t=>t.date<=todayStr()||t.date.slice(0,7)===prv);
   S.tx.push(...demo);
   // contoh anggaran
-  const setBud=(id,v)=>{const c=S.categories.find(x=>x.id===id); if(c&&!c.budget)c.budget=v;};
-  setBud('makan',A(150,400000)); setBud('belanja',A(400,2000000)); setBud('transport',A(120,400000));
-  setBud('tagihan',A(200,600000)); setBud('hiburan',A(120,300000)); setBud('nabung',A(500,1500000));
+  const setBud=(id,va,vb)=>{const c=S.categories.find(x=>x.id===id); if(!c) return;
+    if(!budgetOf(c,'a')) setBudgetOf(c,'a',va);
+    if(!budgetOf(c,'b')) setBudgetOf(c,'b',vb);};
+  setBud('makan',A(90,250000),A(60,150000));       setBud('belanja',A(60,300000),A(340,1700000));
+  setBud('transport',A(90,300000),A(30,100000));   setBud('tagihan',A(60,200000),A(140,400000));
+  setBud('hiburan',A(70,180000),A(50,120000));     setBud('nabung',A(200,600000),A(500,1500000));
+  setBud('rumah',A(1000,1600000),0);
   save(); queueSync('categories');
   if(SYNC.on) for(const t of demo) pushTxCloud(t);
   render(); toast('🎬 Data contoh dimuat — jelajahi Beranda, Riwayat, dan Review!');
@@ -1025,6 +1020,7 @@ window.fillDemo=()=>{
 
 /* ---------- mulai ---------- */
 load();
+UI.who=L.me;               // tampilan selalu dibuka pada pemilik HP ini
 render();
 if(!L.setupDone) firstSetup(); else saveL();
 syncInit();

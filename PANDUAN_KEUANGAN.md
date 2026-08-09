@@ -1,8 +1,10 @@
 # 💞 Keuangan Berdua — Panduan Lengkap
 
-Aplikasi catatan keuangan bulanan untuk **dua orang dengan dua HP berbeda**. Setiap pemasukan dan
-pengeluaran yang dicatat salah satu orang **langsung muncul di HP satunya** (real-time), lengkap
-dengan anggaran per kategori dan **review keuangan setiap bulan**.
+Aplikasi catatan keuangan bulanan untuk **dua orang dengan dua HP berbeda**. Setiap layar
+menampilkan **keuangan satu orang saja**, jadi angkanya tidak tercampur. Data kalian tetap
+**tersinkron real-time** antar HP, dan lewat tombol pengalih di bagian atas kalian bisa melihat
+perkembangan pasangan kapan saja. Dilengkapi anggaran per kategori (juga per orang) dan
+**review keuangan setiap bulan**.
 
 **Satu file. Tanpa server sendiri. Gratis.**
 
@@ -37,6 +39,12 @@ Saat pertama dibuka, aplikasi menanyakan:
 
 Semua ini bisa diubah kapan saja lewat **Atur → Profil Berdua**.
 
+### Tampilan per orang
+Di bagian atas Beranda, Riwayat, dan Review ada **tombol pengalih berisi nama kalian berdua**.
+Yang tampil hanya keuangan orang yang sedang dipilih, tidak pernah keduanya sekaligus. Aplikasi
+selalu terbuka pada pemilik HP itu (bertanda *· Saya*). Ketuk nama pasangan bila ingin melihat
+catatan dan perkembangannya, lalu ketuk namamu lagi untuk kembali.
+
 **Mata uang bawaannya poundsterling (£)** lengkap dengan pence (misal £12.50). Kalau kalian ingin
 memakai Rupiah, ganti di **Atur → Profil Berdua → Mata uang** — pilihan ini berlaku untuk kedua HP
 (ikut tersinkron). Nominal yang sudah tercatat tidak dikonversi otomatis, jadi tentukan mata uangnya
@@ -46,18 +54,24 @@ sejak awal.
 
 - Tekan tombol **＋** besar di tengah bawah.
 - Pilih **💸 Pengeluaran** atau **💰 Pemasukan**, isi nominal, pilih kategori
-  (Makan, Belanja, Transportasi, Tagihan, dll.), tanggal, siapa yang mencatat, dan catatan singkat.
+  (Makan, Belanja, Transportasi, Tagihan, dll.), tanggal, dan catatan singkat.
+- Transaksi otomatis masuk ke catatan **orang yang sedang ditampilkan** — tertulis jelas di kotak
+  berwarna dalam formulir. Jadi kalau ingin mencatatkan sesuatu untuk pasangan, ganti dulu orangnya
+  lewat tombol pengalih di atas.
 - Simpan → langsung terlihat di **Beranda** dan (jika sinkron aktif) di HP pasangan dalam hitungan detik.
 - Salah catat? Buka transaksinya dari Beranda/Riwayat → ubah atau hapus.
 
 ### Anggaran (budget) per kategori
 Di **Atur → Kategori & Anggaran**, tekan ✏️ pada kategori pengeluaran dan isi anggaran per bulan
-(misal Belanja Harian Rp 2.000.000). Beranda akan menampilkan bilah kemajuan yang berubah kuning
-saat mendekati batas dan merah saat terlampaui.
+(misal Belanja Harian £400). **Anggaran dihitung per orang**, jadi kalian masing-masing punya
+batas sendiri di kategori yang sama. Yang sedang diatur adalah milik orang yang aktif di pengalih;
+untuk mengatur milik pasangan, ganti dulu orangnya di Beranda. Bilah kemajuan berubah kuning saat
+mendekati batas dan merah saat terlampaui.
 
 ### Melihat detail
-Tab **🧾 Riwayat** menampilkan seluruh transaksi per bulan, bisa disaring per orang, per jenis
-(masuk/keluar), dan dicari berdasarkan catatan/kategori. Panah ‹ › di atas untuk pindah bulan.
+Tab **🧾 Riwayat** menampilkan transaksi orang yang sedang dipilih untuk bulan itu, bisa disaring
+per jenis (masuk/keluar) dan dicari berdasarkan catatan/kategori. Panah ‹ › untuk pindah bulan,
+tombol pengalih di atas untuk berganti orang.
 
 ## 4. Review Setiap Bulan 📈
 
@@ -65,16 +79,19 @@ Inilah ritual bulanannya — lakukan **berdua** di awal bulan untuk bulan yang b
 
 1. Di awal bulan, Beranda otomatis menampilkan pengingat **"Waktunya review bulanan!"**
    selama bulan lalu belum ditandai selesai. Tekan **Mulai**.
-2. Halaman Review menampilkan:
+2. Halaman Review menampilkan **rapor satu orang** (sesuai pengalih di atas):
    - **Vonis kesehatan keuangan** — berapa % pemasukan yang berhasil disisakan (atau peringatan defisit);
    - **Perbandingan dengan bulan sebelumnya** — pemasukan/pengeluaran naik atau turun berapa persen;
-   - **Rapor per orang** — pemasukan, pengeluaran, dan selisih masing-masing;
+   - **Perkembangan 6 bulan** — tren pengeluaran orang itu dari bulan ke bulan;
    - **Anggaran vs realisasi** per kategori dengan tanda ✅/❌;
    - **5 pengeluaran terbesar** bulan itu;
    - Rata-rata pengeluaran per hari.
-3. Diskusikan, lalu tulis kesepakatan kalian di **Catatan & Kesepakatan Review**
-   (misal: *"Bulan depan jajan kopi maksimal 300 ribu"*). Catatan ini ikut tersinkron ke HP pasangan.
-4. Tekan **✅ Tandai Review Selesai** — bulan itu mendapat centang hijau di riwayat review,
+3. Ketuk nama pasangan di pengalih untuk membaca rapornya, lalu kembali ke namamu. Dengan begitu
+   kalian melihat perkembangan masing-masing secara utuh tanpa angka yang tercampur.
+4. Diskusikan, lalu tulis kesepakatan kalian di **Catatan & Kesepakatan Review**
+   (misal: *"Bulan depan jajan kopi maksimal £30"*). Catatan ini **satu untuk berdua** dan ikut
+   tersinkron, jadi terbaca dari kedua HP dan dari kedua tampilan orang.
+5. Tekan **✅ Tandai Review Selesai** — bulan itu mendapat centang hijau di riwayat review,
    tercatat siapa yang menandai dan kapan.
 
 ## 5. Sinkronisasi 2 HP (sekali pasang, ±5 menit)
@@ -133,7 +150,8 @@ Catat satu pengeluaran di HP pertama → dalam ±2 detik muncul di HP kedua dise
 | Hal | Penjelasan |
 |---|---|
 | Butuh internet? | Hanya untuk sinkron. Tanpa internet aplikasi tetap jalan (tersimpan lokal) dan otomatis menyusul terkirim saat online. |
-| Apa saja yang tersinkron | Transaksi, kategori & anggaran, nama kalian, dan catatan review. Pilihan "HP ini dipakai oleh" tetap per-HP. |
+| Apa saja yang tersinkron | Transaksi kalian berdua, kategori & anggaran masing-masing, nama kalian, dan catatan review. Pilihan "HP ini dipakai oleh" tetap per-HP. |
+| Tampilan | Selalu satu orang pada satu waktu. Pengalih di atas layar untuk berganti orang; aplikasi selalu terbuka pada pemilik HP itu. |
 | Menghapus transaksi | Terhapus di kedua HP. |
 | "Hapus SEMUA data" | Juga membersihkan data di cloud (HP pasangan ikut kosong) — hati-hati. |
 | Cadangan | **Atur → Data & Cadangan → Ekspor JSON** menghasilkan file cadangan yang bisa diimpor kembali kapan saja. |
