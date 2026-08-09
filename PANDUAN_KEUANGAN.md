@@ -3,7 +3,8 @@
 Aplikasi catatan keuangan bulanan untuk **dua orang dengan dua HP berbeda**. Setiap layar
 menampilkan **keuangan satu orang saja**, jadi angkanya tidak tercampur. Data kalian tetap
 **tersinkron real-time** antar HP, dan lewat tombol pengalih di bagian atas kalian bisa melihat
-perkembangan pasangan kapan saja. Dilengkapi anggaran per kategori (juga per orang) dan
+perkembangan pasangan kapan saja. Dilengkapi **batas pengeluaran yang rinci** (total bulanan dan
+per kategori, bisa dipatok harian/mingguan/bulanan, lengkap dengan peringatan otomatis) serta
 **review keuangan setiap bulan**.
 
 **Satu file. Tanpa server sendiri. Gratis.**
@@ -61,12 +62,29 @@ sejak awal.
 - Simpan → langsung terlihat di **Beranda** dan (jika sinkron aktif) di HP pasangan dalam hitungan detik.
 - Salah catat? Buka transaksinya dari Beranda/Riwayat → ubah atau hapus.
 
-### Anggaran (budget) per kategori
-Di **Atur → Kategori & Anggaran**, tekan ✏️ pada kategori pengeluaran dan isi anggaran per bulan
-(misal Belanja Harian £400). **Anggaran dihitung per orang**, jadi kalian masing-masing punya
-batas sendiri di kategori yang sama. Yang sedang diatur adalah milik orang yang aktif di pengalih;
-untuk mengatur milik pasangan, ganti dulu orangnya di Beranda. Bilah kemajuan berubah kuning saat
-mendekati batas dan merah saat terlampaui.
+## 3b. Mengatur Batas Pengeluaran 🎯
+
+Buka **Atur → 🎯 Atur Batas Pengeluaran** (atau tombol **🎯 Batas** di Beranda). Semua batas diatur
+dalam satu layar:
+
+- **Batas total per bulan** — pagu pengeluaran keseluruhan, misal £1.500. Beranda lalu menampilkan
+  bilah "Batas Pengeluaran Bulan Ini" berisi jumlah terpakai, persentase, sisa, dan hitungan
+  **kira-kira berapa lagi yang boleh dipakai per hari** untuk sisa hari di bulan itu.
+- **Batas tiap kategori** — isi angkanya, lalu pilih satuannya: **per hari, per minggu, atau per bulan**.
+  Contoh yang lebih natural: *Makan & Minum £3 per hari*, *Belanja Harian £15 per minggu*,
+  *Sewa £1.000 per bulan*. Aplikasi otomatis menghitungnya menjadi setara sebulan penuh saat
+  dibandingkan dengan realisasi, dan menuliskan konversinya (*batas £3/hr · setara £93 sebulan*).
+
+Kosongkan angkanya (atau isi 0) bila sebuah kategori tidak ingin dibatasi.
+
+**Batas dihitung per orang.** Kalian masing-masing punya pagu sendiri di kategori yang sama, jadi
+Lukas bisa £90 untuk Transportasi sementara Sinta £30. Yang sedang diatur adalah milik orang yang
+aktif di pengalih; untuk mengatur milik pasangan, ganti dulu orangnya di Beranda.
+
+**Peringatan otomatis.** Begitu sebuah transaksi membuat kategori atau total bulanan menembus
+batas, muncul pesan seperti *"⚠️ 🍜 Makan & Minum lewat batas £12"* tepat setelah menyimpan.
+Aplikasi juga memperingatkan saat pemakaian sudah lebih dari 80% batas. Di Beranda, bilah kemajuan
+berubah kuning saat mendekati batas dan merah saat terlampaui.
 
 ### Melihat detail
 Tab **🧾 Riwayat** menampilkan transaksi orang yang sedang dipilih untuk bulan itu, bisa disaring
@@ -83,7 +101,7 @@ Inilah ritual bulanannya — lakukan **berdua** di awal bulan untuk bulan yang b
    - **Vonis kesehatan keuangan** — berapa % pemasukan yang berhasil disisakan (atau peringatan defisit);
    - **Perbandingan dengan bulan sebelumnya** — pemasukan/pengeluaran naik atau turun berapa persen;
    - **Perkembangan 6 bulan** — tren pengeluaran orang itu dari bulan ke bulan;
-   - **Anggaran vs realisasi** per kategori dengan tanda ✅/❌;
+   - **Batas vs realisasi** — batas total bulanan dan tiap kategori, dengan tanda ✅/❌;
    - **5 pengeluaran terbesar** bulan itu;
    - Rata-rata pengeluaran per hari.
 3. Ketuk nama pasangan di pengalih untuk membaca rapornya, lalu kembali ke namamu. Dengan begitu
@@ -150,7 +168,7 @@ Catat satu pengeluaran di HP pertama → dalam ±2 detik muncul di HP kedua dise
 | Hal | Penjelasan |
 |---|---|
 | Butuh internet? | Hanya untuk sinkron. Tanpa internet aplikasi tetap jalan (tersimpan lokal) dan otomatis menyusul terkirim saat online. |
-| Apa saja yang tersinkron | Transaksi kalian berdua, kategori & anggaran masing-masing, nama kalian, dan catatan review. Pilihan "HP ini dipakai oleh" tetap per-HP. |
+| Apa saja yang tersinkron | Transaksi kalian berdua, kategori, batas pengeluaran masing-masing, nama kalian, dan catatan review. Pilihan "HP ini dipakai oleh" tetap per-HP. |
 | Tampilan | Selalu satu orang pada satu waktu. Pengalih di atas layar untuk berganti orang; aplikasi selalu terbuka pada pemilik HP itu. |
 | Menghapus transaksi | Terhapus di kedua HP. |
 | "Hapus SEMUA data" | Juga membersihkan data di cloud (HP pasangan ikut kosong) — hati-hati. |

@@ -127,6 +127,11 @@ input:focus,select:focus,textarea:focus{border-color:var(--pri); background:#fff
 .persw{margin-bottom:10px}
 .persw button.on.pa{color:var(--a); box-shadow:0 1px 4px rgba(0,0,0,.12), inset 0 -2px 0 var(--a)}
 .persw button.on.pb{color:var(--b); box-shadow:0 1px 4px rgba(0,0,0,.12), inset 0 -2px 0 var(--b)}
+.limrow{display:grid; grid-template-columns:1fr 96px 118px; gap:8px; align-items:center; padding:7px 0; border-bottom:1px solid var(--line)}
+.limrow:last-of-type{border-bottom:0}
+.limrow .ln{font-size:13.5px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.limrow input{padding:9px 10px; font-size:14px; text-align:right}
+.limrow select{padding:9px 6px; font-size:12.5px}
 .owner{border-radius:12px; padding:9px 12px; font-size:12.5px; margin-bottom:10px}
 .owner.a{background:var(--a-soft); color:var(--a)} .owner.b{background:var(--b-soft); color:var(--b)}
 /* category picker grid */
@@ -283,10 +288,10 @@ function defaultCats(){return [
 /* ---------- state ---------- */
 const LSK='keuanganBerdua.v1';      // data bersama (ikut tersinkron)
 const LSL='keuanganBerdua.loc.v1';  // khusus perangkat ini (identitas HP)
-let S={ settings:{nameA:'Orang 1', nameB:'Orang 2', currency:'GBP', sync:{enabled:false, apiKey:'', projectId:'', coupleId:''}}, categories:defaultCats(), tx:[], reviews:{} };
+let S={ settings:{nameA:'Orang 1', nameB:'Orang 2', currency:'GBP', limitTotal:{a:0,b:0}, sync:{enabled:false, apiKey:'', projectId:'', coupleId:''}}, categories:defaultCats(), tx:[], reviews:{} };
 let L={ me:'a', deviceId:rid(8), setupDone:false };
 function load(){
-  try{const j=JSON.parse(localStorage.getItem(LSK)); if(j&&j.settings){S=j; S.tx=S.tx||[]; S.reviews=S.reviews||{}; S.categories=S.categories&&S.categories.length?S.categories:defaultCats(); S.settings.sync=S.settings.sync||{enabled:false,apiKey:'',projectId:'',coupleId:''}; S.settings.currency=S.settings.currency||'GBP';}}catch(e){}
+  try{const j=JSON.parse(localStorage.getItem(LSK)); if(j&&j.settings){S=j; S.tx=S.tx||[]; S.reviews=S.reviews||{}; S.categories=S.categories&&S.categories.length?S.categories:defaultCats(); S.settings.sync=S.settings.sync||{enabled:false,apiKey:'',projectId:'',coupleId:''}; S.settings.currency=S.settings.currency||'GBP'; S.settings.limitTotal=S.settings.limitTotal||{a:0,b:0};}}catch(e){}
   try{const j=JSON.parse(localStorage.getItem(LSL)); if(j&&j.deviceId)L=j;}catch(e){}
 }
 function save(){ localStorage.setItem(LSK, JSON.stringify(S)); }
@@ -316,6 +321,28 @@ const budgetOf=(c,who)=>{const b=c&&c.budget; return typeof b==='object'&&b?(Num
 function setBudgetOf(c,who,v){
   if(typeof c.budget!=='object'||!c.budget){const old=Number(c.budget)||0; c.budget={a:old,b:old};}
   c.budget[who]=v;
+}
+/* Batas pengeluaran bisa dipatok per hari, per minggu, atau per bulan.
+   Semuanya dihitung ulang menjadi batas satu bulan penuh agar bisa
+   dibandingkan dengan realisasi bulan berjalan. */
+const PERIODS={day:{lab:'per hari', short:'/hr'}, week:{lab:'per minggu', short:'/mgg'}, month:{lab:'per bulan', short:'/bln'}};
+const periodOf=(c,who)=>{const p=c&&c.period; const v=(typeof p==='object'&&p)?p[who]:p; return PERIODS[v]?v:'month';};
+function setPeriodOf(c,who,v){
+  if(typeof c.period!=='object'||!c.period){const old=PERIODS[c.period]?c.period:'month'; c.period={a:old,b:old};}
+  c.period[who]=PERIODS[v]?v:'month';
+}
+function monthLimit(c,who,mk){
+  const amt=budgetOf(c,who); if(amt<=0) return 0;
+  const per=periodOf(c,who), d=daysInMonth(mk);
+  return per==='day'?amt*d : per==='week'?amt*d/7 : amt;
+}
+const limitLabel=(c,who)=>{const per=periodOf(c,who); return rp(budgetOf(c,who))+(per==='month'?'':' '+PERIODS[per].short);};
+const totalLimit=who=>Number((S.settings.limitTotal||{})[who])||0;
+/* sisa hari pada bulan berjalan (bulan lain dihitung penuh) */
+function daysLeft(mk){
+  const d=daysInMonth(mk);
+  if(mk!==mkeyNow()) return d;
+  return Math.max(1, d - new Date().getDate() + 1);
 }
 
 /* ---------- state UI ---------- */
@@ -362,21 +389,38 @@ function vHome(){
     <div class="sum out"><div class="t">Pengeluaran</div><div class="v">${rp(s.out)}</div></div>
     <div class="sum net ${s.net<0?'minus':''}"><div><div class="t">Sisa bulan ini</div><div class="v">${rpS(s.net)}</div></div><div style="font-size:30px">${s.net<0?'😰':'💰'}</div></div>
   </div>`;
-  // pengeluaran per kategori + anggaran
+  // batas total pengeluaran bulan ini
+  const tl=totalLimit(w);
+  if(tl>0){
+    const pct=Math.round(s.out/tl*100), left=tl-s.out, dl=daysLeft(k);
+    const cls=s.out>tl?'over':(s.out>tl*.8?'warn':'');
+    h+=`<div class="card" style="margin-top:12px"><h2>🎯 Batas Pengeluaran Bulan Ini
+      <button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">Atur</button></h2>
+      <div class="top" style="display:flex;justify-content:space-between;font-size:13.5px"><span>Terpakai <b>${rp(s.out)}</b> dari ${rp(tl)}</span><b class="${cls==='over'?'':''}" style="color:${s.out>tl?'var(--out)':'var(--ink)'}">${pct}%</b></div>
+      <div class="bar" style="margin-top:6px"><i class="${cls}" style="width:${Math.min(100,pct)}%"></i></div>
+      ${left>=0
+        ? `<div class="small mut" style="margin-top:6px">Sisa <b style="color:var(--in)">${rp(left)}</b>${k===mkeyNow()?` · kira-kira <b>${rp(left/dl)}</b> per hari untuk ${dl} hari tersisa`:''}</div>`
+        : `<div class="small" style="margin-top:6px;color:var(--out);font-weight:700">Lewat batas ${rp(-left)} ⚠️</div>`}
+    </div>`;
+  }
+  // pengeluaran per kategori + batasnya
   const rows=S.categories.filter(c=>c.type==='out').map(c=>({c, spent:s.byCatOut[c.id]||0}))
     .filter(x=>x.spent>0 || budgetOf(x.c,w)>0).sort((x,y)=>y.spent-x.spent);
   const orphan=Object.keys(s.byCatOut).filter(id=>!S.categories.some(c=>c.id===id));
   for(const id of orphan) rows.push({c:cat(id), spent:s.byCatOut[id]});
-  h+=`<div class="card" style="margin-top:12px"><h2>📊 Pengeluaran per Kategori</h2>`;
-  if(!rows.length) h+=`<div class="empty"><div class="e">🌱</div>Belum ada pengeluaran bulan ini.<br><span class="tiny">Atur anggaran per kategori di menu <b>Atur → Kategori</b>.</span></div>`;
+  h+=`<div class="card" style="margin-top:12px"><h2>📊 Pengeluaran per Kategori
+    <button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">🎯 Batas</button></h2>`;
+  if(!rows.length) h+=`<div class="empty"><div class="e">🌱</div>Belum ada pengeluaran bulan ini.<br><span class="tiny">Atur batas pengeluaranmu lewat tombol <b>🎯 Batas</b> di atas.</span></div>`;
   else{
-    const mx=Math.max(...rows.map(x=>Math.max(x.spent, budgetOf(x.c,w))),1);
+    const mx=Math.max(...rows.map(x=>Math.max(x.spent, monthLimit(x.c,w,k))),1);
     for(const {c,spent} of rows){
-      const b=budgetOf(c,w), pct=b>0?spent/b:spent/mx;
+      const b=monthLimit(c,w,k), pct=b>0?spent/b:spent/mx;
       const cls=b>0?(spent>b?'over':(spent>b*.8?'warn':'')):'';
+      const per=periodOf(c,w);
       h+=`<div class="crow"><div class="top"><span>${c.icon} ${esc(c.name)}</span><b>${rp(spent)}${b>0?`<span class="mut tiny"> / ${rp(b)}</span>`:''}</b></div>
       <div class="bar"><i class="${cls}" style="width:${Math.min(100,Math.round(pct*100))}%"></i></div>
-      ${b>0&&spent>b?`<div class="tiny" style="color:var(--out);font-weight:700;margin-top:3px">Melebihi anggaran ${rp(spent-b)} ⚠️</div>`:''}</div>`;
+      ${b>0&&per!=='month'?`<div class="tiny mut" style="margin-top:3px">batas ${limitLabel(c,w)} · setara ${rp(b)} sebulan</div>`:''}
+      ${b>0&&spent>b?`<div class="tiny" style="color:var(--out);font-weight:700;margin-top:3px">Melebihi batas ${rp(spent-b)} ⚠️</div>`:''}</div>`;
     }
   }
   h+=`</div>`;
@@ -493,19 +537,27 @@ function vReview(){
     }
     h+=`</div>`;
   }
-  // anggaran vs realisasi
+  // batas vs realisasi
+  const tlim=totalLimit(w);
   const brows=S.categories.filter(c=>c.type==='out'&&(budgetOf(c,w)>0||(s.byCatOut[c.id]||0)>0))
     .map(c=>({c,spent:s.byCatOut[c.id]||0})).sort((x,y)=>y.spent-x.spent);
-  if(brows.length){
-    h+=`<div class="card"><h2>🎯 Anggaran vs Realisasi</h2>`;
+  if(tlim>0||brows.length){
+    h+=`<div class="card"><h2>🎯 Batas vs Realisasi
+      <button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">Atur</button></h2>`;
+    if(tlim>0){
+      h+=`<div class="crow"><div class="top"><span>${s.out<=tlim?'✅':'❌'} <b>Batas total bulanan</b></span>
+        <b>${rp(s.out)}<span class="mut tiny"> / ${rp(tlim)}</span></b></div>
+        <div class="bar"><i class="${s.out>tlim?'over':(s.out>tlim*.8?'warn':'')}" style="width:${Math.min(100,Math.round(s.out/tlim*100))}%"></i></div></div>`;
+    }
     for(const {c,spent} of brows){
-      const b=budgetOf(c,w);
+      const b=monthLimit(c,w,k), per=periodOf(c,w);
       const st=b>0?(spent<=b?'✅':'❌'):'·';
       h+=`<div class="crow"><div class="top"><span>${st} ${c.icon} ${esc(c.name)}</span>
         <b>${rp(spent)}${b>0?`<span class="mut tiny"> / ${rp(b)}</span>`:''}</b></div>
-        ${b>0?`<div class="bar"><i class="${spent>b?'over':(spent>b*.8?'warn':'')}" style="width:${Math.min(100,Math.round(spent/b*100))}%"></i></div>`:''}</div>`;
+        ${b>0?`<div class="bar"><i class="${spent>b?'over':(spent>b*.8?'warn':'')}" style="width:${Math.min(100,Math.round(spent/b*100))}%"></i></div>`:''}
+        ${b>0&&per!=='month'?`<div class="tiny mut" style="margin-top:3px">batas ${limitLabel(c,w)}</div>`:''}</div>`;
     }
-    h+=`<div class="tiny mut" style="margin-top:8px">Anggaran ini milik ${esc(nameOf(w))} sendiri — atur lewat <b>Atur → Kategori & Anggaran</b>.</div></div>`;
+    h+=`<div class="tiny mut" style="margin-top:8px">Batas ini milik ${esc(nameOf(w))} sendiri.</div></div>`;
   }
   // 5 pengeluaran terbesar
   const top=txMonth(k,w).filter(t=>t.type==='out').sort((a,b)=>(b.amount||0)-(a.amount||0)).slice(0,5);
@@ -540,8 +592,9 @@ function vSet(){
   const sy=S.settings.sync||{};
   const catRows=t=>S.categories.filter(c=>c.type===t).map(c=>`
     <div class="srow"><span style="font-size:19px">${c.icon}</span>
-      <div class="n">${esc(c.name)}${t==='out'?`<div class="b">Anggaran ${esc(nameOf(UI.who))}: ${budgetOf(c,UI.who)>0?rp(budgetOf(c,UI.who))+'/bulan':'belum diatur'}</div>`:''}</div>
+      <div class="n">${esc(c.name)}${t==='out'?`<div class="b">Batas ${esc(nameOf(UI.who))}: ${budgetOf(c,UI.who)>0?limitLabel(c,UI.who):'belum diatur'}</div>`:''}</div>
       <button class="iconbtn" onclick="openCat('${esc(c.id)}')">✏️</button></div>`).join('');
+  const tl=totalLimit(UI.who);
   return `
   <div class="card"><h2>👥 Profil Berdua</h2>
     <div class="grid2">
@@ -564,8 +617,16 @@ function vSet(){
     </div>
   </div>
 
-  <div class="card"><h2>🏷️ Kategori & Anggaran</h2>
-    <div class="small mut" style="margin-bottom:8px">Anggaran yang ditampilkan milik <b>${esc(nameOf(UI.who))}</b>. Ganti orangnya di Beranda untuk mengatur milik satunya.</div>
+  <div class="card"><h2>🎯 Batas Pengeluaran</h2>
+    <p class="small mut" style="margin:0 0 10px">Atur batas total bulanan dan batas tiap kategori milik <b>${esc(nameOf(UI.who))}</b> dalam satu layar.
+      Batas bisa dipatok <b>per hari, per minggu, atau per bulan</b>, dan kamu diingatkan begitu terlampaui.</p>
+    <div class="srow"><span style="font-size:19px">💷</span>
+      <div class="n">Batas total per bulan<div class="b">${tl>0?rp(tl):'belum diatur'}</div></div></div>
+    <button class="btn" style="margin-top:12px" onclick="openLimits()">🎯 Atur Batas Pengeluaran</button>
+  </div>
+
+  <div class="card"><h2>🏷️ Kategori</h2>
+    <div class="small mut" style="margin-bottom:8px">Batas yang ditampilkan milik <b>${esc(nameOf(UI.who))}</b>. Ganti orangnya di Beranda untuk mengatur milik satunya.</div>
     <div class="small mut" style="margin-bottom:6px">Pengeluaran</div>${catRows('out')}
     <div class="small mut" style="margin:12px 0 6px">Pemasukan</div>${catRows('in')}
     <div style="margin-top:12px"><button class="btn ghost" onclick="openCat()">➕ Tambah kategori</button></div>
@@ -704,7 +765,8 @@ window.saveTx=()=>{
   closeModal();
   UI.month=date.slice(0,7); UI.who=t.who;
   render();
-  toast(t.type==='in'?'💰 Pemasukan dicatat!':'💸 Pengeluaran dicatat!');
+  const warn=limitAlert(t);
+  toast(warn || (t.type==='in'?'💰 Pemasukan dicatat!':'💸 Pengeluaran dicatat!'));
 };
 window.delTx=id=>{
   if(!confirm('Hapus transaksi ini? (terhapus juga di HP pasangan)')) return;
@@ -712,6 +774,55 @@ window.delTx=id=>{
   save(); deleteTxCloud(id);
   closeModal(); render(); toast('🗑️ Transaksi dihapus.');
 };
+
+/* ---------- modal batas pengeluaran (semua batas dalam satu layar) ---------- */
+window.openLimits=()=>{
+  const w=UI.who;
+  const cats=S.categories.filter(c=>c.type==='out');
+  const perSel=(c)=>`<select id="lp_${esc(c.id)}">${Object.keys(PERIODS).map(p=>
+    `<option value="${p}" ${periodOf(c,w)===p?'selected':''}>${PERIODS[p].lab}</option>`).join('')}</select>`;
+  $('#modal').innerHTML=`
+  <h3>🎯 Batas Pengeluaran<button class="x" onclick="closeModal()">✕</button></h3>
+  <div class="owner ${w}">Batas milik <b>${esc(nameOf(w))}</b>${w===L.me?' (kamu)':''} — pasanganmu punya batasnya sendiri.</div>
+  <div class="field"><label>Batas total pengeluaran per bulan (kosong = tanpa batas)</label>
+    <input id="lTotal" class="amount" style="font-size:20px;padding:11px" inputmode="${cur().dec?'decimal':'numeric'}"
+      value="${amtStr(totalLimit(w))}" placeholder="${cur().sym.trim()} 0" oninput="fmtAmt(this)"></div>
+  <div class="small mut" style="margin:14px 2px 8px"><b>Batas per kategori</b> — pilih satuannya: per hari, per minggu, atau per bulan.</div>
+  ${cats.map(c=>`<div class="limrow">
+    <div class="ln">${c.icon} ${esc(c.name)}</div>
+    <input id="lb_${esc(c.id)}" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(budgetOf(c,w))}" placeholder="0" oninput="fmtAmt(this)">
+    ${perSel(c)}
+  </div>`).join('')}
+  <button class="btn" style="margin-top:14px" onclick="saveLimits()">💾 Simpan Semua Batas</button>
+  <div class="tiny mut" style="margin-top:8px">Batas harian/mingguan otomatis dihitung ke sebulan penuh saat dibandingkan dengan pengeluaran. Kamu akan diingatkan begitu sebuah batas terlampaui.</div>`;
+  openModal();
+};
+window.saveLimits=()=>{
+  const w=UI.who;
+  (S.settings.limitTotal=S.settings.limitTotal||{a:0,b:0})[w]=num($('#lTotal').value);
+  for(const c of S.categories.filter(x=>x.type==='out')){
+    const amt=$('#lb_'+CSS.escape(c.id)), per=$('#lp_'+CSS.escape(c.id));
+    if(!amt) continue;
+    setBudgetOf(c, w, num(amt.value));
+    setPeriodOf(c, w, per?per.value:'month');
+  }
+  save(); queueSync('categories'); queueSync('settings');
+  closeModal(); render(); toast('🎯 Batas pengeluaran disimpan.');
+};
+/* peringatan begitu sebuah batas terlampaui oleh transaksi yang baru disimpan */
+function limitAlert(t){
+  if(t.type!=='out') return '';
+  const k=t.date.slice(0,7), w=whoOf(t), s=sums(k,w), msgs=[];
+  const c=S.categories.find(x=>x.id===t.catId);
+  if(c){
+    const b=monthLimit(c,w,k), spent=s.byCatOut[c.id]||0;
+    if(b>0&&spent>b) msgs.push(`${c.icon} ${c.name} lewat batas ${rp(spent-b)}`);
+    else if(b>0&&spent>b*.8) msgs.push(`${c.icon} ${c.name} sudah ${Math.round(spent/b*100)}% dari batas`);
+  }
+  const tl=totalLimit(w);
+  if(tl>0&&s.out>tl) msgs.push(`total bulan ini lewat batas ${rp(s.out-tl)}`);
+  return msgs.length?'⚠️ '+msgs.join(' · '):'';
+}
 
 /* ---------- modal kategori ---------- */
 const MC={};
@@ -732,9 +843,13 @@ function drawCatModal(c){
     <div class="field"><label>Emoji ikon</label><input id="mcIcon" value="${esc(c?c.icon:'🏷️')}" maxlength="4"></div>
     <div class="field"><label>Nama kategori</label><input id="mcName" value="${esc(c?c.name:'')}" placeholder="cth: Kopi & Nongkrong"></div>
   </div>
-  <div class="field" style="${MC.type==='in'?'display:none':''}"><label>Anggaran ${esc(nameOf(UI.who))} per bulan (${cur().sym.trim()}, kosong = tanpa anggaran)</label>
-    <input id="mcBud" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(c?budgetOf(c,UI.who):0)}" placeholder="${cur().dec?'cth: 1,500':'cth: 1.500.000'}" oninput="fmtAmt(this)">
-    <div class="tiny mut" style="margin-top:5px">Anggaran dihitung per orang. Untuk mengatur milik ${esc(nameOf(UI.who==='a'?'b':'a'))}, ganti dulu orangnya di Beranda.</div></div>
+  <div class="field" style="${MC.type==='in'?'display:none':''}"><label>Batas pengeluaran ${esc(nameOf(UI.who))} (kosong = tanpa batas)</label>
+    <div style="display:flex;gap:8px">
+      <input id="mcBud" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(c?budgetOf(c,UI.who):0)}" placeholder="${cur().dec?'cth: 400':'cth: 1.500.000'}" oninput="fmtAmt(this)">
+      <select id="mcPer" style="width:130px;flex:none">${Object.keys(PERIODS).map(p=>
+        `<option value="${p}" ${(c?periodOf(c,UI.who):'month')===p?'selected':''}>${PERIODS[p].lab}</option>`).join('')}</select>
+    </div>
+    <div class="tiny mut" style="margin-top:5px">Batas dihitung per orang. Untuk mengatur milik ${esc(nameOf(UI.who==='a'?'b':'a'))}, ganti dulu orangnya di Beranda.</div></div>
   <button class="btn" onclick="saveCat()">💾 Simpan</button>
   ${c?`<button class="btn danger" style="margin-top:8px" onclick="delCat('${esc(c.id)}')" ${used?'disabled title="Masih dipakai transaksi"':''}>🗑️ Hapus kategori${used?' (masih dipakai transaksi)':''}</button>`:''}`;
 }
@@ -748,12 +863,11 @@ window.saveCat=()=>{
   if(!name) return toast('Isi nama kategorinya dulu.');
   const icon=$('#mcIcon').value.trim()||'🏷️';
   const budget=MC.type==='out'?num($('#mcBud')?$('#mcBud').value:0):0;
-  if(MC.id){ const c=S.categories.find(x=>x.id===MC.id); if(c){ c.name=name; c.icon=icon; setBudgetOf(c,UI.who,budget); } }
-  else{
-    const c={id:'c'+Date.now().toString(36)+rid(3), name, icon, type:MC.type, budget:{a:0,b:0}};
-    c.budget[UI.who]=budget;
-    S.categories.push(c);
-  }
+  const per=MC.type==='out'&&$('#mcPer')?$('#mcPer').value:'month';
+  let c=MC.id?S.categories.find(x=>x.id===MC.id):null;
+  if(!c){ c={id:'c'+Date.now().toString(36)+rid(3), name, icon, type:MC.type, budget:{a:0,b:0}, period:{a:'month',b:'month'}}; S.categories.push(c); }
+  c.name=name; c.icon=icon;
+  setBudgetOf(c,UI.who,budget); setPeriodOf(c,UI.who,per);
   save(); queueSync('categories');
   closeModal(); render(); toast('🏷️ Kategori disimpan.');
 };
@@ -861,7 +975,7 @@ function pushKV(id){
   let data;
   if(id==='categories') data=S.categories;
   else if(id==='reviews') data=S.reviews;
-  else if(id==='settings') data={nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency};
+  else if(id==='settings') data={nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency, limitTotal:S.settings.limitTotal};
   SYNC.db.doc(kvPath(id)).set({j:JSON.stringify(data), dev:L.deviceId, at:Date.now()})
     .then(()=>setSyncBadge('on'))
     .catch(e=>setSyncBadge('err','☁️ Gagal kirim: '+e.message));
@@ -888,7 +1002,7 @@ function listenCloud(){
       if(val==null) return;
       const id=ch.doc.id;
       if(id==='categories'){ S.categories=val; changed=true; }
-      else if(id==='settings'){ Object.assign(S.settings,{nameA:val.nameA??S.settings.nameA, nameB:val.nameB??S.settings.nameB, currency:val.currency??S.settings.currency}); changed=true; }
+      else if(id==='settings'){ Object.assign(S.settings,{nameA:val.nameA??S.settings.nameA, nameB:val.nameB??S.settings.nameB, currency:val.currency??S.settings.currency, limitTotal:val.limitTotal??S.settings.limitTotal}); changed=true; }
       else if(id==='reviews'){
         for(const k in val){ const cur=S.reviews[k]; if(!cur||(val[k].at||0)>=(cur.at||0)) S.reviews[k]=val[k]; }
         changed=true;
@@ -925,7 +1039,7 @@ function remoteRefresh(){
 /* ---------- ekspor / impor / demo / hapus ---------- */
 window.exportJson=()=>{
   const data={app:'keuangan-berdua', version:1, exportedAt:new Date().toISOString(),
-    settings:{nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency},
+    settings:{nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency, limitTotal:S.settings.limitTotal},
     categories:S.categories, tx:S.tx, reviews:S.reviews};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
@@ -943,7 +1057,7 @@ window.importJson=inp=>{
       if(!Array.isArray(d.tx)||!Array.isArray(d.categories)) throw new Error('format tidak dikenal');
       if(!confirm('Impor akan MENGGANTI data di HP ini dengan isi file ('+d.tx.length+' transaksi). Lanjutkan?')) return;
       S.categories=d.categories; S.tx=d.tx; S.reviews=d.reviews||{};
-      if(d.settings){ S.settings.nameA=d.settings.nameA||S.settings.nameA; S.settings.nameB=d.settings.nameB||S.settings.nameB; S.settings.currency=d.settings.currency||S.settings.currency; }
+      if(d.settings){ S.settings.nameA=d.settings.nameA||S.settings.nameA; S.settings.nameB=d.settings.nameB||S.settings.nameB; S.settings.currency=d.settings.currency||S.settings.currency; S.settings.limitTotal=d.settings.limitTotal||S.settings.limitTotal; }
       save(); render(); toast('⬆️ Data berhasil diimpor.');
       if(SYNC.on) pushAllToCloud();
     }catch(e){ toast('❌ File tidak valid: '+e.message); }
@@ -1006,13 +1120,21 @@ window.fillDemo=()=>{
   ].filter(t=>t.date<=todayStr()||t.date.slice(0,7)===prv);
   S.tx.push(...demo);
   // contoh anggaran
-  const setBud=(id,va,vb)=>{const c=S.categories.find(x=>x.id===id); if(!c) return;
-    if(!budgetOf(c,'a')) setBudgetOf(c,'a',va);
-    if(!budgetOf(c,'b')) setBudgetOf(c,'b',vb);};
-  setBud('makan',A(90,250000),A(60,150000));       setBud('belanja',A(60,300000),A(340,1700000));
-  setBud('transport',A(90,300000),A(30,100000));   setBud('tagihan',A(60,200000),A(140,400000));
-  setBud('hiburan',A(70,180000),A(50,120000));     setBud('nabung',A(200,600000),A(500,1500000));
-  setBud('rumah',A(1000,1600000),0);
+  // contoh batas: sebagian dipatok harian/mingguan agar terlihat detailnya
+  const setBud=(id,va,vb,per)=>{const c=S.categories.find(x=>x.id===id); if(!c) return;
+    if(!budgetOf(c,'a')){ setBudgetOf(c,'a',va); setPeriodOf(c,'a',per||'month'); }
+    if(!budgetOf(c,'b')){ setBudgetOf(c,'b',vb); setPeriodOf(c,'b',per||'month'); }};
+  setBud('makan',     A(3,8000),      A(2,5000),      'day');
+  setBud('belanja',   A(15,70000),    A(80,400000),   'week');
+  setBud('transport', A(90,300000),   A(30,100000));
+  setBud('tagihan',   A(60,200000),   A(140,400000));
+  setBud('hiburan',   A(70,180000),   A(50,120000));
+  setBud('nabung',    A(200,600000),  A(500,1500000));
+  setBud('rumah',     A(1000,1600000), 0);
+  const lt=S.settings.limitTotal=S.settings.limitTotal||{a:0,b:0};
+  if(!lt.a) lt.a=A(1500,3800000);
+  if(!lt.b) lt.b=A(1200,3000000);
+  queueSync('settings');
   save(); queueSync('categories');
   if(SYNC.on) for(const t of demo) pushTxCloud(t);
   render(); toast('🎬 Data contoh dimuat — jelajahi Beranda, Riwayat, dan Review!');
