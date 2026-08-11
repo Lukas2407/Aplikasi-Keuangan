@@ -127,6 +127,27 @@ input:focus,select:focus,textarea:focus{border-color:var(--pri); background:#fff
 .persw{margin-bottom:10px}
 .persw button.on.pa{color:var(--a); box-shadow:0 1px 4px rgba(0,0,0,.12), inset 0 -2px 0 var(--a)}
 .persw button.on.pb{color:var(--b); box-shadow:0 1px 4px rgba(0,0,0,.12), inset 0 -2px 0 var(--b)}
+/* rincian barang dari struk */
+.tagx{display:inline-block; background:var(--pri-soft); color:var(--pri); border-radius:99px; padding:1px 7px; font-size:10.5px; font-weight:700; vertical-align:1px}
+.itemlist{border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin-bottom:12px; background:#fbfbfe}
+.itemlist .ilh{font-size:12px; font-weight:700; color:var(--mut); margin-bottom:6px}
+.itemlist .ili{display:flex; justify-content:space-between; gap:10px; font-size:13px; padding:3px 0}
+.itrow{border:1px solid var(--line); border-radius:12px; padding:8px; margin-bottom:8px; background:#fbfbfe}
+.itrow .itop{display:flex; gap:8px; align-items:center}
+.itrow .ibot{display:grid; grid-template-columns:1fr 1.25fr; gap:8px; margin-top:7px}
+.itrow input,.itrow select{padding:9px 10px; font-size:13.5px}
+.itrow .iamt{text-align:right}
+.scantotal{text-align:right; font-size:15px; margin-top:10px; padding-top:8px; border-top:1px solid var(--line)}
+.btn.big{padding:16px; font-size:15.5px}
+/* aksi cepat di Beranda */
+.quick{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px}
+.quick button{
+  display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 8px;
+  border:1px solid var(--line); background:var(--card); border-radius:14px; cursor:pointer;
+  font-size:12.5px; font-weight:700; color:var(--ink); box-shadow:var(--shadow); min-height:64px; justify-content:center;
+}
+.quick button:active{transform:scale(.97)}
+.quick button .i{font-size:20px; line-height:1}
 .limrow{display:grid; grid-template-columns:1fr 96px 118px; gap:8px; align-items:center; padding:7px 0; border-bottom:1px solid var(--line)}
 .limrow:last-of-type{border-bottom:0}
 .limrow .ln{font-size:13.5px; font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -361,11 +382,21 @@ function defaultCats(){return [
   {id:'tagihan',  name:'Tagihan & Pulsa',      icon:'💡', type:'out', budget:0},
   {id:'rumah',    name:'Sewa / Cicilan',       icon:'🏠', type:'out', budget:0},
   {id:'sehat',    name:'Kesehatan',            icon:'💊', type:'out', budget:0},
+  {id:'baju',     name:'Baju',                 icon:'👕', type:'out', budget:0},
+  {id:'makeup',   name:'Make Up',              icon:'💄', type:'out', budget:0},
+  {id:'skincare', name:'Skincare',             icon:'🧴', type:'out', budget:0},
   {id:'hiburan',  name:'Hiburan & Jajan',      icon:'🎬', type:'out', budget:0},
   {id:'keluarga', name:'Keluarga & Sosial',    icon:'👪', type:'out', budget:0},
   {id:'nabung',   name:'Tabungan & Investasi', icon:'🏦', type:'out', budget:0},
   {id:'lainout',  name:'Lainnya',              icon:'📦', type:'out', budget:0},
 ];}
+/* kategori yang ditambahkan setelah rilis pertama ikut muncul di data lama */
+function mergeNewCats(){
+  const have=new Set(S.categories.map(c=>c.id));
+  let added=0;
+  for(const c of defaultCats()) if(!have.has(c.id)&&['baju','makeup','skincare'].includes(c.id)){ S.categories.push(c); added++; }
+  return added;
+}
 
 /* ---------- state ---------- */
 const LSK='keuanganBerdua.v1';      // data bersama (ikut tersinkron)
@@ -473,6 +504,10 @@ function vHome(){
     <div class="sum in"><div class="t">Pemasukan</div><div class="v">${rp(s.inn)}</div></div>
     <div class="sum out"><div class="t">Pengeluaran</div><div class="v">${rp(s.out)}</div></div>
     <div class="sum net ${s.net<0?'minus':''}"><div><div class="t">Sisa bulan ini</div><div class="v">${rpS(s.net)}</div></div><div style="font-size:30px">${s.net<0?'😰':'💰'}</div></div>
+  </div>
+  <div class="quick">
+    <button onclick="openTx()"><span class="i">➕</span>Catat cepat</button>
+    <button onclick="openScan()"><span class="i">📷</span>Scan struk</button>
   </div>`;
   // batas total pengeluaran bulan ini
   const tl=totalLimit(w);
@@ -513,18 +548,20 @@ function vHome(){
   const recent=txMonth(k,w).slice().sort((a,b)=>b.date.localeCompare(a.date)||((b.at||0)-(a.at||0))).slice(0,5);
   h+=`<div class="card"><h2>🕐 Transaksi Terakhir <button class="btn ghost sm" style="margin-left:auto" onclick="go('hist')">Lihat semua</button></h2>`;
   if(!recent.length){
-    h+=`<div class="empty"><div class="e">📝</div>Belum ada catatan di ${esc(mLabel(k))}.<br><br>
-      <button class="btn sm" onclick="openTx()">➕ Catat transaksi pertama</button>
+    h+=`<div class="empty"><div class="e">📝</div>Belum ada catatan di ${esc(mLabel(k))}.<br>
+      <span class="tiny">Mulai dari yang paling mudah:</span><br><br>
+      <button class="btn sm" onclick="openTx()">➕ Catat transaksi</button>
+      <div style="margin-top:8px"><button class="btn ghost sm" onclick="openScan()">📷 Scan struk belanja</button></div>
       ${S.tx.length===0?`<div style="margin-top:8px"><button class="btn ghost sm" onclick="fillDemo()">🎬 Coba dengan data contoh</button></div>`:''}</div>`;
   }else h+=recent.map(txRow).join('');
   h+=`</div>`;
   return h;
 }
 function txRow(t){
-  const c=cat(t.catId);
+  const c=cat(t.catId), n=Array.isArray(t.items)?t.items.length:0;
   return `<div class="trow" onclick="openTx('${esc(t.id)}')">
     <div class="tic">${c.icon}</div>
-    <div class="tmid"><div class="n">${esc(c.name)}</div>
+    <div class="tmid"><div class="n">${esc(c.name)}${n?' <span class="tagx">🧾 '+n+' barang</span>':''}</div>
     <div class="s">${esc(t.note||dLabel(t.date))}</div></div>
     <div class="tamt ${t.type}">${t.type==='in'?'+':'−'}${rp(t.amount)}</div></div>`;
 }
@@ -537,8 +574,8 @@ function vHist(){
   let h=personSel()+monthSel();
   h+=`<div class="chips">
     <button class="chip ${UI.f.type==='all'?'on':''}" onclick="setF('type','all')">Semua</button>
-    <button class="chip ${UI.f.type==='in'?'on':''}" onclick="setF('type', UI.f.type==='in'?'all':'in')">💚 Masuk</button>
-    <button class="chip ${UI.f.type==='out'?'on':''}" onclick="setF('type', UI.f.type==='out'?'all':'out')">❤️ Keluar</button>
+    <button class="chip ${UI.f.type==='in'?'on':''}" onclick="setF('type', UI.f.type==='in'?'all':'in')">⬇️ Masuk</button>
+    <button class="chip ${UI.f.type==='out'?'on':''}" onclick="setF('type', UI.f.type==='out'?'all':'out')">⬆️ Keluar</button>
   </div>
   <div class="field"><input placeholder="🔍 Cari catatan / kategori…" value="${esc(UI.f.q)}" oninput="setQ(this)"></div>
   <div class="small mut" style="margin:0 2px 4px">${s.count} transaksi · Masuk <b style="color:var(--in)">${rp(s.inn)}</b> · Keluar <b style="color:var(--out)">${rp(s.out)}</b></div>
@@ -648,7 +685,7 @@ function vReview(){
   const you=mine?'Kamu':esc(nameOf(w));
   let cls='ok', icon='🙂', txt;
   if(s.net<0){ cls='bad'; icon='🚨'; txt=`Defisit ${rp(s.net)} — pengeluaran melebihi pemasukan.`; }
-  else if(rate!==null&&rate>=20){ cls='good'; icon='💚'; txt=`Hebat! ${you} menyisakan ${rate}% dari pemasukan (${rp(s.net)}).`; }
+  else if(rate!==null&&rate>=20){ cls='good'; icon='🌟'; txt=`Hebat! ${you} menyisakan ${rate}% dari pemasukan (${rp(s.net)}).`; }
   else txt=`Sisa ${rpS(s.net)}${rate!==null?` (${rate}% dari pemasukan)`:''} — masih bisa ditingkatkan.`;
   h+=`<div class="verdict ${cls}"><div style="font-size:26px">${icon}</div><div class="big">${txt}</div>
     <div class="small" style="opacity:.9;margin-top:4px">${s.count} transaksi ${esc(nameOf(w))} di ${esc(mLabel(k))}</div></div>`;
@@ -849,7 +886,7 @@ window.toggleAutolock=()=>{ S.settings.autolock=S.settings.autolock===false; sav
 const appUrl=()=>location.href.split('#')[0].split('?')[0];
 window.shareApp=async()=>{
   if(location.protocol==='file:') return toast('Aplikasi belum di-hosting — kirim file index.html ke HP pasangan.');
-  if(navigator.share){ try{ await navigator.share({title:'Keuangan Berdua 💞', text:'Pasang aplikasi keuangan kita di HP-mu:', url:appUrl()}); }catch(e){/* dibatalkan */} }
+  if(navigator.share){ try{ await navigator.share({title:'Keuangan Berdua', text:'Pasang aplikasi keuangan kita di HP-mu:', url:appUrl()}); }catch(e){/* dibatalkan */} }
   else copyAppLink();
 };
 window.copyAppLink=()=>{
@@ -873,12 +910,18 @@ window.openTx=id=>{
   MT.date=t?t.date:todayStr();
   MT.amount=t?t.amount:'';
   MT.note=t?(t.note||''):'';
+  MT.items=t&&Array.isArray(t.items)?t.items:null;
   drawTxModal();
   openModal();
 };
 function drawTxModal(){
   $('#modal').innerHTML=`
   <h3>${MT.id?'✏️ Ubah Transaksi':'➕ Catat Transaksi'}<button class="x" onclick="closeModal()">✕</button></h3>
+  ${MT.id?'':`<button class="btn ghost" style="margin-bottom:12px" onclick="openScan()">📷 Scan struk belanja — rinci otomatis</button>`}
+  ${MT.items&&MT.items.length?`<div class="itemlist">
+    <div class="ilh">🧾 Rincian belanja (${MT.items.length} barang)</div>
+    ${MT.items.map(x=>`<div class="ili"><span>${x.q>1?esc(x.q)+'× ':''}${esc(x.n)}</span><b>${rp(x.p)}</b></div>`).join('')}
+  </div>`:''}
   <div class="seg" style="margin-bottom:12px">
     <button class="${MT.type==='out'?'on tout':''}" onclick="mtType('out')">💸 Pengeluaran</button>
     <button class="${MT.type==='in'?'on tin':''}" onclick="mtType('in')">💰 Pemasukan</button>
@@ -924,6 +967,7 @@ window.saveTx=()=>{
     type:MT.type, amount, catId:MT.catId, who:MT.who, date,
     note:$('#mtNote').value.trim(), at:Date.now(),
   };
+  if(MT.items) t.items=MT.items;              // rincian dari struk ikut terbawa saat diubah
   const i=S.tx.findIndex(x=>x.id===t.id);
   if(i>=0) S.tx[i]=t; else S.tx.push(t);
   save(); pushTxCloud(t);
@@ -938,6 +982,253 @@ window.delTx=id=>{
   S.tx=S.tx.filter(x=>x.id!==id);
   save(); deleteTxCloud(id);
   closeModal(); render(); toast('🗑️ Transaksi dihapus.');
+};
+
+/* =====================================================================
+   PEMINDAI STRUK BELANJA
+   Foto struk dibaca dengan OCR (Tesseract.js, diunduh sekali lalu
+   tersimpan di cache browser), teksnya diurai menjadi daftar barang,
+   lalu kamu tinjau/perbaiki sebelum disimpan. Selalu ada jalur manual
+   (ketik/tempel teks struk) agar tetap bisa dipakai tanpa internet.
+   ===================================================================== */
+const ocrPaths=()=>Object.assign({
+  lib:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
+  worker:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
+  core:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
+  lang:'https://tessdata.projectnaptha.com/4.0.0'
+}, window.OCR_PATHS||{});
+
+/* --- penguraian teks struk (fungsi murni, bisa diuji terpisah) --- */
+const RE_TOTAL=/^\s*(grand\s*total|total\s*(belanja|bayar|harga)?|jumlah)\b/i;
+const RE_SKIP=/(sub\s*total|vat|tax|ppn|pajak|service|cash|tunai|change|kembali|card|debit|credit|visa|master|e-?wallet|qris|gopay|ovo|diskon|discount|voucher|promo|point|poin|saldo|balance|bayar|payment|tender|pembulatan|round|terima\s*kasih|thank|kasir|cashier|struk|receipt|invoice|npwp|no\.?\s*(trans|struk|hp)|tanggal|date|time|jam|telp|phone|alamat|address|www\.|\.com|member|kembalian)/i;
+const RE_QTY_LEAD=/^\s*(\d{1,3})\s*[xX*]\s*/;
+const RE_UNIT=/\s(\d{1,3})\s*[xX@]\s*([\d][\d.,]*)\s*$/;
+function parsePrice(s){
+  const c=cur();
+  const t=String(s||'').replace(/[^\d.,]/g,'');
+  if(!t) return null;
+  if(c.dec>0){
+    const m=t.match(/^(\d{1,3}(?:[,.]\d{3})*|\d+)(?:[.,](\d{1,2}))?$/);
+    if(!m) return null;
+    const whole=Number(m[1].replace(/[.,]/g,''));
+    const frac=m[2]?Number((m[2]+'0').slice(0,2))/100:0;
+    return whole+frac;
+  }
+  const d=t.replace(/[.,]/g,'');
+  return d?Number(d):null;
+}
+function parseReceipt(text){
+  const items=[]; let total=null;
+  for(const raw of String(text||'').split(/\r?\n/)){
+    const line=raw.replace(/\s+/g,' ').trim();
+    if(line.length<3) continue;
+    const tail=line.match(/([\d][\d.,]*)\s*[A-Za-z*#]{0,3}\s*$/);
+    if(!tail) continue;
+    const price=parsePrice(tail[1]);
+    if(price===null||price<=0) continue;
+    if(RE_TOTAL.test(line)){ if(total===null) total=price; continue; }
+    if(RE_SKIP.test(line)) continue;
+    let name=line.slice(0, tail.index).trim().replace(/[.\-–—:*]+$/,'').trim();
+    let qty=1;
+    const unit=name.match(RE_UNIT)||line.match(RE_UNIT);
+    const lead=name.match(RE_QTY_LEAD);
+    if(lead){ qty=Number(lead[1])||1; name=name.replace(RE_QTY_LEAD,'').trim(); }
+    else if(unit){ qty=Number(unit[1])||1; name=name.replace(RE_UNIT,'').trim(); }
+    if((name.match(/[A-Za-z]/g)||[]).length<2) continue;   // buang baris angka/tanggal
+    if(name.length>60) name=name.slice(0,60);
+    items.push({n:name, q:qty, p:price, c:guessCat(name)});
+  }
+  return {items, total};
+}
+/* tebakan kategori dari nama barang — kata kunci Indonesia & Inggris */
+const CAT_HINTS=[
+  ['baju',     ['baju','kaos','kaus','kemeja','celana','jaket','dress','rok','jeans','hoodie','sweater','pakaian','t-shirt','tshirt','shirt','trouser','skirt','coat','jacket','kaos kaki','sock','underwear','bra','piyama','sepatu','sandal','shoe','tas','hijab','jilbab']],
+  ['makeup',   ['lipstik','lipstick','lip tint','lipgloss','bedak','foundation','maskara','mascara','eyeliner','eyeshadow','blush','concealer','cushion','highlighter','make up','makeup','compact powder','brow','pensil alis','primer']],
+  ['skincare', ['skincare','serum','moisturizer','moisturiser','pelembab','toner','cleanser','facial wash','face wash','sunscreen','sunblock','spf','masker wajah','face mask','sheet mask','micellar','retinol','niacinamide','krim wajah','day cream','night cream','body lotion','hand cream','acne','ceramide','hyaluronic']],
+  ['makan',    ['nasi','ayam','mie','bakso','soto','kopi','coffee','teh','tea','roti','bread','susu','milk','air mineral','snack','makan','minum','sandwich','burger','pizza','juice','jus','coklat','chocolate','biskuit','biscuit','gula','garam','telur','egg','beras','rice','daging','meat','sayur','buah','fruit','keju','cheese','yogurt']],
+  ['tagihan',  ['pulsa','paket data','listrik','token','wifi','internet','tagihan','bill','electric','water','gas']],
+  ['transport',['bensin','pertalite','pertamax','solar','fuel','petrol','diesel','parkir','parking','tol','toll','tiket','ticket','ojek','grab','gojek','taxi','bus','kereta','train']],
+  ['sehat',    ['obat','vitamin','medicine','apotek','pharmacy','masker medis','plester','paracetamol','panadol']],
+  ['belanja',  ['sabun','shampoo','sampo','pasta gigi','toothpaste','deterjen','detergent','tissue','tisu','pembersih','sikat','popok','diaper','kantong','plastik']],
+];
+function guessCat(name){
+  const n=String(name||'').toLowerCase();
+  for(const [id,kws] of CAT_HINTS){
+    if(!S.categories.some(c=>c.id===id)) continue;
+    if(kws.some(k=>n.includes(k))) return id;
+  }
+  return S.categories.some(c=>c.id==='belanja')?'belanja':(S.categories.find(c=>c.type==='out')||{}).id||'';
+}
+
+/* --- OCR --- */
+async function runOCR(dataUrl, onProgress){
+  const P=ocrPaths();
+  if(!window.Tesseract) await loadScript(P.lib);
+  onProgress('Menyiapkan pembaca teks…',5);
+  const worker=await Tesseract.createWorker('eng',1,{
+    workerPath:P.worker, corePath:P.core, langPath:P.lang,
+    logger:m=>{
+      if(m.status==='recognizing text') onProgress('Membaca struk…', 30+Math.round((m.progress||0)*65));
+      else if(/loading|initializ|download/i.test(m.status||'')) onProgress('Mengunduh mesin OCR (sekali saja)…', 5+Math.round((m.progress||0)*25));
+    }
+  });
+  try{
+    const {data:{text}}=await worker.recognize(dataUrl);
+    return text;
+  } finally { await worker.terminate(); }
+}
+/* perkecil + naikkan kontras supaya teks struk lebih terbaca */
+function prepImage(file){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onerror=()=>rej(new Error('gagal membaca berkas'));
+    fr.onload=()=>{
+      const img=new Image();
+      img.onerror=()=>rej(new Error('berkas ini bukan gambar'));
+      img.onload=()=>{
+        const max=1600, sc=Math.min(1, max/Math.max(img.width,img.height));
+        const w=Math.max(1,Math.round(img.width*sc)), h=Math.max(1,Math.round(img.height*sc));
+        const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+        const cx=cv.getContext('2d'); cx.drawImage(img,0,0,w,h);
+        try{
+          const d=cx.getImageData(0,0,w,h), a=d.data;
+          for(let i=0;i<a.length;i+=4){
+            const g=0.299*a[i]+0.587*a[i+1]+0.114*a[i+2];
+            const v=Math.max(0,Math.min(255,(g-128)*1.6+128));   // kontras
+            a[i]=a[i+1]=a[i+2]=v;
+          }
+          cx.putImageData(d,0,0);
+        }catch(e){/* canvas terproteksi — pakai apa adanya */}
+        res(cv.toDataURL('image/jpeg',0.9));
+      };
+      img.src=fr.result;
+    };
+    fr.readAsDataURL(file);
+  });
+}
+
+/* --- layar pemindai --- */
+const SCAN={items:[], date:todayStr(), note:''};
+window.openScan=()=>{
+  SCAN.items=[]; SCAN.date=todayStr(); SCAN.note='';
+  drawScanStart();
+  openModal();
+};
+function drawScanStart(){
+  $('#modal').innerHTML=`
+  <h3>📷 Scan Struk Belanja<button class="x" onclick="closeModal()">✕</button></h3>
+  <div class="owner ${UI.who}">Hasilnya masuk ke catatan <b>${esc(nameOf(UI.who))}</b>${UI.who===L.me?' (kamu)':''}</div>
+  <p class="small mut" style="margin:0 0 14px">Foto struknya, nanti aplikasi membaca dan merinci belanjaanmu satu per satu.
+    Kamu bisa memperbaiki hasilnya sebelum disimpan.</p>
+  <button class="btn big" onclick="$('#scanCam').click()">📷 Ambil / Pilih Foto Struk</button>
+  <input type="file" id="scanCam" accept="image/*" capture="environment" style="display:none" onchange="scanFile(this)">
+  <button class="btn ghost" style="margin-top:10px" onclick="drawScanType()">⌨️ Ketik / tempel teks struk</button>
+  <div id="scanProg" style="display:none;margin-top:14px">
+    <div class="small mut" id="scanMsg">Menyiapkan…</div>
+    <div class="bar" style="margin-top:6px"><i id="scanBar" style="width:0%"></i></div>
+    <div class="tiny mut" style="margin-top:6px">Pembacaan pertama mengunduh mesin OCR sekali (butuh internet), setelah itu tersimpan di HP.</div>
+  </div>
+  <div class="tiny mut" style="margin-top:12px">Tips foto: struk diletakkan datar, cahaya cukup, dan seluruh tulisan masuk ke dalam bingkai.</div>`;
+}
+function drawScanType(){
+  $('#modal').innerHTML=`
+  <h3>⌨️ Teks Struk<button class="x" onclick="closeModal()">✕</button></h3>
+  <p class="small mut" style="margin:0 0 10px">Ketik atau tempel isi struk — satu barang per baris, harga di akhir baris.
+    Contoh: <i>Kaos Polos 12.99</i></p>
+  <textarea id="scanText" rows="8" placeholder="Kaos Polos&#10;Lipstik Matte&#10;Serum Vitamin C"></textarea>
+  <button class="btn" style="margin-top:10px" onclick="scanFromText()">Uraikan Jadi Daftar Barang</button>
+  <button class="btn ghost" style="margin-top:8px" onclick="drawScanStart()">← Kembali</button>`;
+}
+window.scanFromText=()=>{
+  const t=$('#scanText').value||'';
+  const {items}=parseReceipt(t);
+  if(!items.length) return toast('Belum ada baris barang yang terbaca — pastikan ada harganya.');
+  SCAN.items=items; drawScanReview();
+};
+window.scanFile=async inp=>{
+  const f=inp.files&&inp.files[0]; if(!f) return;
+  inp.value='';
+  const prog=$('#scanProg'); if(prog) prog.style.display='block';
+  const setP=(msg,pct)=>{const m=$('#scanMsg'), b=$('#scanBar'); if(m)m.textContent=msg; if(b)b.style.width=Math.min(100,pct)+'%';};
+  try{
+    setP('Menyiapkan foto…',3);
+    const url=await prepImage(f);
+    const text=await runOCR(url,setP);
+    setP('Merapikan hasil…',98);
+    const {items}=parseReceipt(text);
+    if(!items.length){
+      toast('Tulisan struk belum terbaca jelas. Coba foto ulang atau ketik manual.');
+      drawScanType();
+      return;
+    }
+    SCAN.items=items;
+    drawScanReview();
+  }catch(err){
+    toast('Gagal membaca struk: '+err.message);
+    drawScanType();
+  }
+};
+function drawScanReview(){
+  const cats=S.categories.filter(c=>c.type==='out');
+  const opt=sel=>cats.map(c=>`<option value="${esc(c.id)}" ${c.id===sel?'selected':''}>${c.icon} ${esc(c.name)}</option>`).join('');
+  const rows=SCAN.items.map((it,i)=>`
+    <div class="itrow">
+      <div class="itop">
+        <input class="iname" value="${esc(it.n)}" oninput="scanEdit(${i},'n',this.value)" placeholder="Nama barang">
+        <button class="iconbtn" title="Hapus baris" onclick="scanDel(${i})">✕</button>
+      </div>
+      <div class="ibot">
+        <input class="iamt" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(it.p)}" oninput="fmtAmt(this);scanEdit(${i},'p',this.value)">
+        <select onchange="scanEdit(${i},'c',this.value)">${opt(it.c)}</select>
+      </div>
+    </div>`).join('');
+  const total=SCAN.items.reduce((a,x)=>a+(Number(x.p)||0),0);
+  const groups=[...new Set(SCAN.items.map(x=>x.c))];
+  $('#modal').innerHTML=`
+  <h3>🧾 Tinjau Belanjaan<button class="x" onclick="closeModal()">✕</button></h3>
+  <div class="owner ${UI.who}">Masuk ke catatan <b>${esc(nameOf(UI.who))}</b> · ${SCAN.items.length} barang terbaca</div>
+  <p class="small mut" style="margin:0 0 10px">Periksa sebentar — nama, harga, dan kategorinya bisa kamu betulkan.
+    Hasil pembacaan foto kadang meleset satu-dua huruf.</p>
+  <div id="scanRows">${rows}</div>
+  <button class="btn ghost sm" style="margin-top:8px" onclick="scanAdd()">➕ Tambah baris</button>
+  <div class="scantotal">Total <b>${rp(total)}</b></div>
+  <div class="grid2" style="margin-top:12px">
+    <div class="field"><label>Tanggal</label><input type="date" id="scanDate" value="${esc(SCAN.date)}"></div>
+    <div class="field"><label>Catatan</label><input id="scanNote" value="${esc(SCAN.note)}" placeholder="cth: belanja bulanan"></div>
+  </div>
+  <button class="btn" onclick="scanSave(false)">💾 Simpan Jadi 1 Transaksi</button>
+  ${groups.length>1?`<button class="btn ghost" style="margin-top:8px" onclick="scanSave(true)">🗂️ Simpan Terpisah per Kategori (${groups.length} transaksi)</button>`:''}
+  <button class="btn ghost" style="margin-top:8px" onclick="drawScanStart()">← Scan ulang</button>`;
+}
+window.scanEdit=(i,k,v)=>{ if(!SCAN.items[i]) return; SCAN.items[i][k]= k==='p'?num(v):v; };
+window.scanDel=i=>{ SCAN.items.splice(i,1); if(!SCAN.items.length) return drawScanStart(); scanKeepMeta(); drawScanReview(); };
+window.scanAdd=()=>{ scanKeepMeta(); SCAN.items.push({n:'',q:1,p:0,c:guessCat('')}); drawScanReview(); };
+function scanKeepMeta(){ const d=$('#scanDate'), n=$('#scanNote'); if(d)SCAN.date=d.value||SCAN.date; if(n)SCAN.note=n.value; }
+window.scanSave=split=>{
+  scanKeepMeta();
+  const items=SCAN.items.filter(x=>(Number(x.p)||0)>0 && String(x.n).trim());
+  if(!items.length) return toast('Belum ada barang dengan harga.');
+  const date=SCAN.date||todayStr(), who=UI.who, note=SCAN.note.trim();
+  const mk=(list,catId)=>{
+    const amount=list.reduce((a,x)=>a+(Number(x.p)||0),0);
+    return {id:L.deviceId.slice(0,4)+'-'+Date.now().toString(36)+rid(4), type:'out', amount, catId, who, date,
+      note:note||('Struk · '+list.length+' barang'), items:list.map(x=>({n:x.n,q:x.q||1,p:Number(x.p)||0})), at:Date.now()};
+  };
+  const made=[];
+  if(split){
+    for(const g of [...new Set(items.map(x=>x.c))]) made.push(mk(items.filter(x=>x.c===g), g));
+  }else{
+    const tally={}; for(const x of items) tally[x.c]=(tally[x.c]||0)+(Number(x.p)||0);
+    const main=Object.keys(tally).sort((a,b)=>tally[b]-tally[a])[0];
+    made.push(mk(items, main));
+  }
+  for(const t of made){ S.tx.push(t); pushTxCloud(t); }
+  save();
+  closeModal();
+  UI.month=date.slice(0,7); UI.who=who;
+  render();
+  const warn=made.map(limitAlert).filter(Boolean)[0];
+  toast(warn || `🧾 Tersimpan: ${items.length} barang${made.length>1?' dalam '+made.length+' transaksi':''}.`);
 };
 
 /* ---------- modal batas pengeluaran (semua batas dalam satu layar) ---------- */
@@ -1173,7 +1464,7 @@ window.removePin=async()=>{
 /* ---------- setup pertama kali ---------- */
 function firstSetup(){
   $('#modal').innerHTML=`
-  <h3>💞 Selamat datang!</h3>
+  <h3>👋 Selamat datang!</h3>
   <p class="small mut" style="margin:0 0 12px">Aplikasi catatan keuangan bulanan untuk <b>dua orang, dua HP</b>.
   Isi dulu nama kalian berdua:</p>
   <div class="field"><label>Nama orang ke-1</label><input id="fsA" placeholder="cth: Lukas"></div>
@@ -1226,6 +1517,7 @@ async function syncInit(){
     const probe=await SYNC.db.doc(kvPath('categories')).get();
     if(!probe.exists) await pushAllToCloud();
     listenCloud();
+    if(PENDING_CATS){ PENDING_CATS=false; pushKV('categories'); }
     setSyncBadge('on');
   }catch(err){
     SYNC.on=false;
@@ -1423,6 +1715,8 @@ window.fillDemo=()=>{
 
 /* ---------- mulai ---------- */
 load();
+let PENDING_CATS=mergeNewCats()>0;   // kategori baru (Baju/Make Up/Skincare) untuk data lama
+if(PENDING_CATS) save();
 UI.who=L.me;               // tampilan selalu dibuka pada pemilik HP ini
 render();
 if(!L.setupDone) firstSetup();

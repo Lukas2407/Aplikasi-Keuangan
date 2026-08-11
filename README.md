@@ -18,7 +18,9 @@ perkembangannya. Lengkap dengan anggaran per orang dan **review keuangan setiap 
 
 ## ✨ Fitur
 
+- **📷 Scan struk belanja** — foto struknya, aplikasi membaca dan **merinci apa saja yang dibeli** beserta harganya, menebak kategori tiap barang, lalu menyimpannya sebagai satu transaksi berisi rincian atau dipecah otomatis per kategori. Ada juga jalur ketik/tempel teks untuk pemakaian offline.
 - **➕ Catat cepat** — pengeluaran/pemasukan, nominal £ (mendukung pence), kategori, tanggal, catatan. Transaksi masuk ke catatan orang yang sedang ditampilkan.
+- **🏷️ Kategori lengkap** — termasuk **Baju 👕, Make Up 💄, dan Skincare 🧴**, dan bisa ditambah sendiri.
 - **👤 Tampilan per orang** — Beranda, Riwayat, dan Review hanya menampilkan satu orang; aplikasi terbuka pada pemilik HP itu, dan pengalih di atas untuk melihat pasangan.
 - **☁️ Dua HP tetap satu data** — sinkronisasi real-time lewat Firebase gratis milik sendiri.
 - **🎯 Batas pengeluaran rinci** — batas total bulanan plus batas tiap kategori yang bisa dipatok **per hari, per minggu, atau per bulan**, semuanya dalam satu layar. Beranda menghitung sisa jatah per hari, dan kamu diperingatkan otomatis begitu sebuah batas terlampaui. Batas milik masing-masing orang.
@@ -31,9 +33,9 @@ perkembangannya. Lengkap dengan anggaran per orang dan **review keuangan setiap 
 |---|---|---|
 | ![Beranda](screenshots/shot-keuangan-beranda.png) | ![Batas](screenshots/shot-keuangan-batas.png) | ![Kunci](screenshots/shot-keuangan-kunci.png) |
 
-| Grafik Review | Hasil PDF |
-|---|---|
-| ![Grafik](screenshots/shot-keuangan-grafik.png) | ![PDF](screenshots/shot-keuangan-pdf.png) |
+| Scan Struk | Grafik Review | Hasil PDF |
+|---|---|---|
+| ![Struk](screenshots/shot-keuangan-struk.png) | ![Grafik](screenshots/shot-keuangan-grafik.png) | ![PDF](screenshots/shot-keuangan-pdf.png) |
 
 ## 🛠️ Teknis
 

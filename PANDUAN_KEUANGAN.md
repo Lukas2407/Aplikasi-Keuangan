@@ -1,4 +1,4 @@
-# 💞 Keuangan Berdua — Panduan Lengkap
+# £ Keuangan Berdua — Panduan Lengkap
 
 Aplikasi catatan keuangan bulanan untuk **dua orang dengan dua HP berbeda**. Setiap layar
 menampilkan **keuangan satu orang saja**, jadi angkanya tidak tercampur. Data kalian tetap
@@ -75,6 +75,39 @@ sejak awal.
   lewat tombol pengalih di atas.
 - Simpan → langsung terlihat di **Beranda** dan (jika sinkron aktif) di HP pasangan dalam hitungan detik.
 - Salah catat? Buka transaksinya dari Beranda/Riwayat → ubah atau hapus.
+
+### Kategori yang tersedia
+Pemasukan: Gaji, Bonus & THR, Usaha Sampingan, Pemasukan Lain.
+Pengeluaran: Makan & Minum, Belanja Harian, Transportasi, Tagihan & Pulsa, Sewa/Cicilan, Kesehatan,
+**Baju 👕, Make Up 💄, Skincare 🧴**, Hiburan & Jajan, Keluarga & Sosial, Tabungan & Investasi, Lainnya.
+Kamu tetap bisa menambah kategori sendiri lewat **Atur → Kategori → Tambah kategori**.
+
+## 3a. Scan Struk Belanja 📷
+
+Daripada mengetik satu per satu, foto saja struknya. Aplikasi membaca tulisannya lalu **merinci apa
+saja yang kamu beli**.
+
+1. Tekan **📷 Scan struk** di Beranda (atau tombol yang sama di dalam formulir catat transaksi).
+2. Ambil foto struknya, atau pilih foto yang sudah ada di galeri.
+3. Tunggu sebentar — aplikasi membaca tulisan pada struk. Pembacaan **pertama kali mengunduh mesin
+   OCR sekali saja** (butuh internet); setelah itu tersimpan di HP dan bisa dipakai berulang.
+4. Muncul layar **Tinjau Belanjaan** berisi daftar barang beserta harganya. Baris total, kembalian,
+   pajak, dan ucapan terima kasih otomatis dibuang.
+5. **Kategori tiap barang ditebak otomatis** dari namanya — misal *T-Shirt Cotton* → Baju,
+   *Maybelline Lipstick* → Make Up, *Cetaphil Cleanser* → Skincare, *Bread* → Makan & Minum.
+   Semua bisa kamu betulkan, termasuk nama dan harganya, dan baris bisa ditambah/dihapus.
+6. Pilih cara menyimpan:
+   - **Simpan Jadi 1 Transaksi** — satu catatan berisi rincian semua barang.
+   - **Simpan Terpisah per Kategori** — otomatis dipecah, misal satu transaksi Baju, satu Make Up,
+     satu Skincare. Berguna supaya batas tiap kategori terhitung benar.
+
+Transaksi yang punya rincian ditandai lencana **🧾 N barang** di Riwayat; buka transaksinya untuk
+melihat daftar belanjanya.
+
+> **Catatan jujur soal ketelitian.** Pembacaan foto bukan sihir: struk yang kusut, buram, atau
+> berhuruf kecil bisa terbaca meleset satu-dua huruf atau angka. Karena itu selalu ada layar tinjauan
+> sebelum disimpan — periksa sekilas, terutama angkanya. Kalau fotonya gagal terbaca, ada jalur
+> **⌨️ Ketik / tempel teks struk** yang jalan tanpa internet: satu barang per baris, harga di akhir baris.
 
 ## 3b. Mengatur Batas Pengeluaran 🎯
 
@@ -196,7 +229,8 @@ Catat satu pengeluaran di HP pertama → dalam ±2 detik muncul di HP kedua dise
 | Hal | Penjelasan |
 |---|---|
 | Butuh internet? | Hanya untuk sinkron. Tanpa internet aplikasi tetap jalan (tersimpan lokal) dan otomatis menyusul terkirim saat online. |
-| Apa saja yang tersinkron | Transaksi kalian berdua, kategori, batas pengeluaran masing-masing, nama kalian, catatan review, dan PIN (dalam bentuk teracak) sehingga berlaku sama di kedua HP. Pilihan "HP ini dipakai oleh" tetap per-HP. |
+| Apa saja yang tersinkron | Transaksi kalian berdua (termasuk rincian barang dari struk), kategori, batas pengeluaran masing-masing, nama kalian, catatan review, dan PIN (dalam bentuk teracak) sehingga berlaku sama di kedua HP. Pilihan "HP ini dipakai oleh" tetap per-HP. |
+| Foto struk | Yang disimpan hanya **rincian barangnya**, bukan file fotonya — supaya penyimpanan HP tidak cepat penuh. |
 | Tampilan | Selalu satu orang pada satu waktu. Pengalih di atas layar untuk berganti orang; aplikasi selalu terbuka pada pemilik HP itu. |
 | Menghapus transaksi | Terhapus di kedua HP. |
 | "Hapus SEMUA data" | Juga membersihkan data di cloud (HP pasangan ikut kosong) — hati-hati. |
@@ -210,9 +244,13 @@ Catat satu pengeluaran di HP pertama → dalam ±2 detik muncul di HP kedua dise
 |---|---|---|
 | ![Beranda](screenshots/shot-keuangan-beranda.png) | ![Riwayat](screenshots/shot-keuangan-riwayat.png) | ![Kunci](screenshots/shot-keuangan-kunci.png) |
 
-| Batas Pengeluaran | Grafik Review | Hasil PDF |
+| Scan Struk | Batas Pengeluaran | Grafik Review |
 |---|---|---|
-| ![Batas](screenshots/shot-keuangan-batas.png) | ![Grafik](screenshots/shot-keuangan-grafik.png) | ![PDF](screenshots/shot-keuangan-pdf.png) |
+| ![Struk](screenshots/shot-keuangan-struk.png) | ![Batas](screenshots/shot-keuangan-batas.png) | ![Grafik](screenshots/shot-keuangan-grafik.png) |
+
+Hasil review yang disimpan sebagai PDF:
+
+![PDF](screenshots/shot-keuangan-pdf.png)
 
 ## 8. Pemecahan Masalah
 
