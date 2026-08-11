@@ -1026,7 +1026,11 @@ const ocrPaths=()=>Object.assign({
   lib:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js',
   worker:'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/worker.min.js',
   core:'https://cdn.jsdelivr.net/npm/tesseract.js-core@5.1.1',
-  lang:'https://tessdata.projectnaptha.com/4.0.0'
+  /* model ringkas: unduhan ±2 MB dan penyiapan ±6x lebih cepat daripada
+     model standar. Bila alamatnya tak tersedia, otomatis jatuh ke model standar. */
+  lang:'https://tessdata.projectnaptha.com/4.0.0_fast',
+  langFallback:'https://tessdata.projectnaptha.com/4.0.0',
+  gzip:true
 }, window.OCR_PATHS||{});
 
 /* --- penguraian teks struk (fungsi murni, bisa diuji terpisah) --- */
@@ -1091,22 +1095,71 @@ function guessCat(name){
   return S.categories.some(c=>c.id==='belanja')?'belanja':(S.categories.find(c=>c.type==='out')||{}).id||'';
 }
 
-/* --- OCR --- */
-async function runOCR(dataUrl, onProgress){
-  const P=ocrPaths();
-  if(!window.Tesseract) await loadScript(P.lib);
-  onProgress('Menyiapkan pembaca teks…',5);
-  const worker=await Tesseract.createWorker('eng',1,{
-    workerPath:P.worker, corePath:P.core, langPath:P.lang,
-    logger:m=>{
-      if(m.status==='recognizing text') onProgress('Membaca struk…', 30+Math.round((m.progress||0)*65));
-      else if(/loading|initializ|download/i.test(m.status||'')) onProgress('Mengunduh mesin OCR (sekali saja)…', 5+Math.round((m.progress||0)*25));
-    }
+/* --- OCR ---
+   Mesin OCR dibuat SEKALI lalu dipakai ulang selama sesi. Penyiapannya
+   memakan waktu jauh lebih lama daripada pembacaannya sendiri, jadi
+   sekali dibuat, scan berikutnya terasa langsung. */
+let OCR_WORKER=null, OCR_MAKING=null, OCR_PROGRESS=null;
+function ocrReport(m){
+  if(!OCR_PROGRESS) return;
+  if(m.status==='recognizing text') OCR_PROGRESS('Membaca struk…', 45+Math.round((m.progress||0)*50));
+  else if(/loading|initializ|download/i.test(m.status||'')) OCR_PROGRESS('Menyiapkan mesin OCR (sekali saja)…', 8+Math.round((m.progress||0)*35));
+}
+/* Model yang tidak tersedia membuat pembuatan worker menggantung, bukan
+   melempar error. Karena itu alamat model dicek lebih dulu, dan pembuatan
+   worker diberi batas waktu supaya tidak menunggu selamanya. */
+function headOk(url, ms=6000){
+  return new Promise(res=>{
+    let done=false;
+    const ac=typeof AbortController!=='undefined'?new AbortController():null;
+    const t=setTimeout(()=>{ if(!done){ done=true; if(ac)ac.abort(); res(false); } }, ms);
+    fetch(url,{method:'HEAD', signal:ac?ac.signal:undefined})
+      .then(r=>{ if(!done){ done=true; clearTimeout(t); res(!!r.ok); } })
+      .catch(()=>{ if(!done){ done=true; clearTimeout(t); res(false); } });
   });
+}
+async function pickLangPath(P){
+  const file='/eng.traineddata'+(P.gzip!==false?'.gz':'');
+  for(const lp of [P.lang, P.langFallback].filter(Boolean)){
+    if(await headOk(String(lp).replace(/\/+$/,'')+file)) return lp;
+  }
+  return P.langFallback||P.lang;                 // upaya terakhir, biarkan Tesseract mencoba
+}
+async function ocrWorker(){
+  if(OCR_WORKER) return OCR_WORKER;
+  if(OCR_MAKING) return OCR_MAKING;
+  OCR_MAKING=(async()=>{
+    const P=ocrPaths();
+    if(!window.Tesseract) await loadScript(P.lib);
+    const langPath=await pickLangPath(P);
+    const w=await Promise.race([
+      Tesseract.createWorker('eng',1,{workerPath:P.worker, corePath:P.core, langPath, gzip:P.gzip!==false, logger:ocrReport}),
+      new Promise((_,rej)=>setTimeout(()=>rej(new Error('penyiapan terlalu lama, periksa koneksi')),120000))
+    ]);
+    // struk = satu kolom teks; melewati analisis tata letak mempercepat ±30%
+    await w.setParameters({tessedit_pageseg_mode:'6'});
+    OCR_WORKER=w;
+    return w;
+  })();
+  try{ return await OCR_MAKING; }
+  finally{ OCR_MAKING=null; }
+}
+function ocrRelease(){                        // bebaskan memori saat aplikasi dikunci
+  const w=OCR_WORKER; OCR_WORKER=null;
+  if(w) w.terminate().catch(()=>{});
+}
+async function runOCR(dataUrl, onProgress){
+  OCR_PROGRESS=onProgress;
   try{
-    const {data:{text}}=await worker.recognize(dataUrl);
+    onProgress('Menyiapkan pembaca teks…',5);
+    const w=await ocrWorker();
+    onProgress('Membaca struk…',45);
+    const {data:{text}}=await w.recognize(dataUrl);
     return text;
-  } finally { await worker.terminate(); }
+  }catch(e){
+    ocrRelease();                             // supaya percobaan berikutnya mulai bersih
+    throw e;
+  }finally{ OCR_PROGRESS=null; }
 }
 /* perkecil + naikkan kontras supaya teks struk lebih terbaca */
 function prepImage(file){
@@ -1145,6 +1198,10 @@ window.openScan=()=>{
   SCAN.items=[]; SCAN.date=todayStr(); SCAN.note='';
   drawScanStart();
   openModal();
+  // panaskan mesin OCR selagi pengguna memotret, supaya menunggunya tak dobel
+  if(navigator.onLine!==false) ocrWorker().then(()=>{
+    const b=$('#scanWarm'); if(b) b.textContent='⚡ Mesin OCR siap — pembacaan akan cepat.';
+  }).catch(()=>{});
 };
 function drawScanStart(){
   $('#modal').innerHTML=`
@@ -1158,9 +1215,10 @@ function drawScanStart(){
   <div id="scanProg" style="display:none;margin-top:14px">
     <div class="small mut" id="scanMsg">Menyiapkan…</div>
     <div class="bar" style="margin-top:6px"><i id="scanBar" style="width:0%"></i></div>
-    <div class="tiny mut" style="margin-top:6px">Pembacaan pertama mengunduh mesin OCR sekali (butuh internet), setelah itu tersimpan di HP.</div>
+    <div class="tiny mut" style="margin-top:6px">Pembacaan pertama mengunduh mesin OCR sekali, sekitar 2 MB (butuh internet). Setelah itu tersimpan di HP dan scan berikutnya jauh lebih cepat.</div>
   </div>
-  <div class="tiny mut" style="margin-top:12px">Tips foto: struk diletakkan datar, cahaya cukup, dan seluruh tulisan masuk ke dalam bingkai.</div>`;
+  <div id="scanWarm" class="tiny mut" style="margin-top:12px">⏳ Menyiapkan mesin OCR di latar belakang…</div>
+  <div class="tiny mut" style="margin-top:6px">Tips foto: struk diletakkan datar, cahaya cukup, dan seluruh tulisan masuk ke dalam bingkai.</div>`;
 }
 function drawScanType(){
   $('#modal').innerHTML=`
@@ -1451,6 +1509,7 @@ window.forgotPin=()=>{
 };
 function lockNow(){
   SESSION.authAs=null;
+  ocrRelease();
   closeModal();
   if(anyPin()) lockScreen();
   else render();

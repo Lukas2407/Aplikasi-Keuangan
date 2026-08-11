@@ -93,7 +93,9 @@ saja yang kamu beli**.
 1. Tekan **📷 Scan struk** di Beranda (atau tombol yang sama di dalam formulir catat transaksi).
 2. Ambil foto struknya, atau pilih foto yang sudah ada di galeri.
 3. Tunggu sebentar — aplikasi membaca tulisan pada struk. Pembacaan **pertama kali mengunduh mesin
-   OCR sekali saja** (butuh internet); setelah itu tersimpan di HP dan bisa dipakai berulang.
+   OCR sekali saja, sekitar 2 MB** (butuh internet); setelah itu tersimpan di HP dan scan berikutnya
+   jauh lebih cepat karena mesinnya dipakai ulang. Mesin juga mulai disiapkan begitu layar scan
+   dibuka, jadi sebagian waktu tunggu sudah berjalan selagi kamu memotret.
 4. Muncul layar **Tinjau Belanjaan** berisi daftar barang beserta harganya. Baris total, kembalian,
    pajak, dan ucapan terima kasih otomatis dibuang.
 5. **Kategori tiap barang ditebak otomatis** dari namanya — misal *T-Shirt Cotton* → Baju,
