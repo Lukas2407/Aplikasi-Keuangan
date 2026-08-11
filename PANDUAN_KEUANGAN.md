@@ -1,9 +1,9 @@
-# £ Keuangan Berdua — Panduan Lengkap
+# £ Catatan Keuangan — Panduan Lengkap
 
-Aplikasi catatan keuangan bulanan untuk **dua orang dengan dua HP berbeda**. Setiap layar
+Aplikasi pencatatan keuangan bulanan untuk **dua orang dengan dua HP berbeda**. Setiap layar
 menampilkan **keuangan satu orang saja**, jadi angkanya tidak tercampur. Data kalian tetap
 **tersinkron real-time** antar HP, dan lewat tombol pengalih di bagian atas kalian bisa melihat
-perkembangan pasangan kapan saja. Dilengkapi **batas pengeluaran yang rinci** (total bulanan dan
+perkembangan pengguna satunya kapan saja. Dilengkapi **batas pengeluaran yang rinci** (total bulanan dan
 per kategori, bisa dipatok harian/mingguan/bulanan, lengkap dengan peringatan otomatis) serta
 **review keuangan setiap bulan**.
 
@@ -34,34 +34,37 @@ tetap butuh internet.
 
 Saat pertama dibuka, aplikasi menanyakan:
 
-1. **Nama kalian berdua** — misal *Lukas* dan *Sinta*.
+1. **Nama kedua pengguna** — misal *Lukas* dan *Sinta*.
 2. **HP ini dipakai oleh siapa** — di HP Lukas pilih *Lukas*, di HP Sinta pilih *Sinta*.
    Dengan begitu setiap catatan otomatis diberi label siapa yang mencatat.
 
-Semua ini bisa diubah kapan saja lewat **Atur → Profil Berdua**.
+Semua ini bisa diubah kapan saja lewat **Atur → Profil Pengguna**.
 
 ### Kunci pribadi 🔒
 Buka **Atur → 🔒 Kunci Pribadi → Pasang PIN**. Setelah dipasang:
 
 - Aplikasi meminta PIN setiap kali dibuka, dan **PIN yang dimasukkan menentukan catatan siapa yang terbuka**.
-- Pasanganmu tidak bisa berpindah ke catatanmu tanpa PIN-mu, di HP mana pun — nama yang terkunci
-  ditandai gembok 🔒 pada pengalih.
+- **Satu sesi hanya untuk satu orang.** Setelah masuk sebagai dirimu, catatan orang satunya tetap bisa
+  kamu buka untuk **dilihat**, tetapi tidak bisa diubah sama sekali: tombol tambah, scan struk, edit
+  transaksi, batas pengeluaran, kategori, dan catatan review semuanya dimatikan, dan layarnya diberi
+  penanda *Mode lihat saja*. Untuk mengubah catatan orang satunya, ia harus masuk sendiri lewat
+  **Ganti pengguna** dengan PIN miliknya.
 - Aplikasi mengunci sendiri setelah **5 menit menganggur** (bisa dimatikan), dan ada tombol
   **Kunci sekarang** bila HP mau dipinjamkan sebentar.
 - PIN disimpan dalam bentuk **teracak SHA-256**, tidak pernah sebagai angka aslinya, jadi tidak bisa
   dibaca siapa pun termasuk dari file cadangan.
 
-Masing-masing memasang PIN sendiri. Kalau salah satu lupa PIN-nya, pasangan bisa membuka dengan PIN
+Masing-masing memasang PIN sendiri. Kalau salah satu lupa PIN-nya, pengguna satunya bisa membuka dengan PIN
 miliknya lalu menghapus/mengganti PIN yang lupa lewat Atur.
 
 ### Tampilan per orang
-Di bagian atas Beranda, Riwayat, dan Review ada **tombol pengalih berisi nama kalian berdua**.
+Di bagian atas Beranda, Riwayat, dan Review ada **tombol pengalih berisi nama kedua pengguna**.
 Yang tampil hanya keuangan orang yang sedang dipilih, tidak pernah keduanya sekaligus. Aplikasi
-selalu terbuka pada pemilik HP itu (bertanda *· Saya*). Ketuk nama pasangan bila ingin melihat
+selalu terbuka pada pemilik HP itu (bertanda *· Saya*). Ketuk nama pengguna satunya bila ingin melihat
 catatan dan perkembangannya, lalu ketuk namamu lagi untuk kembali.
 
 **Mata uang bawaannya poundsterling (£)** lengkap dengan pence (misal £12.50). Kalau kalian ingin
-memakai Rupiah, ganti di **Atur → Profil Berdua → Mata uang** — pilihan ini berlaku untuk kedua HP
+memakai Rupiah, ganti di **Atur → Profil Pengguna → Mata uang** — pilihan ini berlaku untuk kedua HP
 (ikut tersinkron). Nominal yang sudah tercatat tidak dikonversi otomatis, jadi tentukan mata uangnya
 sejak awal.
 
@@ -71,9 +74,9 @@ sejak awal.
 - Pilih **💸 Pengeluaran** atau **💰 Pemasukan**, isi nominal, pilih kategori
   (Makan, Belanja, Transportasi, Tagihan, dll.), tanggal, dan catatan singkat.
 - Transaksi otomatis masuk ke catatan **orang yang sedang ditampilkan** — tertulis jelas di kotak
-  berwarna dalam formulir. Jadi kalau ingin mencatatkan sesuatu untuk pasangan, ganti dulu orangnya
+  berwarna dalam formulir. Jadi kalau ingin mencatatkan sesuatu untuk pengguna satunya, ganti dulu orangnya
   lewat tombol pengalih di atas.
-- Simpan → langsung terlihat di **Beranda** dan (jika sinkron aktif) di HP pasangan dalam hitungan detik.
+- Simpan → langsung terlihat di **Beranda** dan (jika sinkron aktif) di HP kedua dalam hitungan detik.
 - Salah catat? Buka transaksinya dari Beranda/Riwayat → ubah atau hapus.
 
 ### Kategori yang tersedia
@@ -126,7 +129,7 @@ Kosongkan angkanya (atau isi 0) bila sebuah kategori tidak ingin dibatasi.
 
 **Batas dihitung per orang.** Kalian masing-masing punya pagu sendiri di kategori yang sama, jadi
 Lukas bisa £90 untuk Transportasi sementara Sinta £30. Yang sedang diatur adalah milik orang yang
-aktif di pengalih; untuk mengatur milik pasangan, ganti dulu orangnya di Beranda.
+aktif di pengalih; untuk mengatur milik pengguna satunya, ganti dulu orangnya di Beranda.
 
 **Peringatan otomatis.** Begitu sebuah transaksi membuat kategori atau total bulanan menembus
 batas, muncul pesan seperti *"⚠️ 🍜 Makan & Minum lewat batas £12"* tepat setelah menyimpan.
@@ -140,23 +143,23 @@ tombol pengalih di atas untuk berganti orang.
 
 ## 4. Review Setiap Bulan 📈
 
-Inilah ritual bulanannya — lakukan **berdua** di awal bulan untuk bulan yang baru selesai:
+Inilah ritual bulanannya — lakukan **bersama** di awal bulan untuk bulan yang baru selesai:
 
 1. Di awal bulan, Beranda otomatis menampilkan pengingat **"Waktunya review bulanan!"**
    selama bulan lalu belum ditandai selesai. Tekan **Mulai**.
 2. Halaman Review menampilkan **rapor satu orang** (sesuai pengalih di atas):
    - **Vonis kesehatan keuangan** — berapa % pemasukan yang berhasil disisakan (atau peringatan defisit);
    - **Perbandingan dengan bulan sebelumnya** — pemasukan/pengeluaran naik atau turun berapa persen;
-   - **Grafik Pemasukan vs Pengeluaran** — batang berpasangan untuk 6 bulan terakhir, hijau untuk
+   - **Grafik Pemasukan vs Pengeluaran** — batang berpengguna satunya untuk 6 bulan terakhir, hijau untuk
      pemasukan dan merah berarsir untuk pengeluaran, dengan bulan yang sedang direview disorot;
    - **Rincian 6 bulan** — angka tiap bulan sebagai tabel pendamping grafik;
    - **Batas vs realisasi** — batas total bulanan dan tiap kategori, dengan tanda ✅/❌;
    - **5 pengeluaran terbesar** bulan itu;
    - Rata-rata pengeluaran per hari.
-3. Ketuk nama pasangan di pengalih untuk membaca rapornya, lalu kembali ke namamu. Dengan begitu
+3. Ketuk nama pengguna satunya di pengalih untuk membaca rapornya, lalu kembali ke namamu. Dengan begitu
    kalian melihat perkembangan masing-masing secara utuh tanpa angka yang tercampur.
 4. Diskusikan, lalu tulis kesepakatan kalian di **Catatan & Kesepakatan Review**
-   (misal: *"Bulan depan jajan kopi maksimal £30"*). Catatan ini **satu untuk berdua** dan ikut
+   (misal: *"Bulan depan jajan kopi maksimal £30"*). Catatan ini **satu untuk bersama** dan ikut
    tersinkron, jadi terbaca dari kedua HP dan dari kedua tampilan orang.
 5. Tekan **✅ Tandai Review Selesai** — bulan itu mendapat centang hijau di riwayat review,
    tercatat siapa yang menandai dan kapan.
@@ -171,7 +174,7 @@ Saat dialog cetak muncul, pilih tujuan **"Simpan sebagai PDF"**:
 - **iPhone (Safari):** di pratinjau cetak, cubit-perbesar halamannya, lalu tekan tombol Bagikan ⬆️ →
   *Simpan ke File* atau kirim langsung lewat WhatsApp/email.
 
-Hasilnya bisa kalian simpan sebagai arsip bulanan atau dikirim ke pasangan.
+Hasilnya bisa kalian simpan sebagai arsip bulanan atau dikirim ke pengguna satunya.
 
 ## 5. Sinkronisasi 2 HP (sekali pasang, ±5 menit)
 
@@ -198,9 +201,9 @@ service cloud.firestore {
 }
 ```
 
-> 🔐 **Keamanannya dari mana?** Data tersimpan di bawah **ID Keluarga** — kode acak panjang yang
-> hanya diketahui HP kalian berdua (seperti nomor rekening rahasia). Tanpa ID itu data tidak bisa
-> ditemukan. Karena itu **jangan bagikan ID Keluarga** ke siapa pun.
+> 🔐 **Keamanannya dari mana?** Data tersimpan di bawah **Kode Sinkronisasi** — kode acak panjang yang
+> hanya diketahui HP kedua pengguna (seperti nomor rekening rahasia). Tanpa ID itu data tidak bisa
+> ditemukan. Karena itu **jangan bagikan Kode Sinkronisasi** ke siapa pun.
 
 ### Langkah C — Ambil 2 kode proyek
 1. ⚙️ **Project settings** → gulir ke **Your apps** → klik ikon **`</>`** (Web) → beri nama bebas → **Register app**.
@@ -212,28 +215,28 @@ service cloud.firestore {
 Di **HP pertama**:
 1. **Atur → ☁️ Sinkronisasi 2 HP** → centang *Aktifkan sinkronisasi cloud*.
 2. Isi **API Key** dan **Project ID** dari Langkah C.
-3. Tekan **🎲** untuk membuat **ID Keluarga** acak → tekan **📋** untuk menyalin → kirim ke pasangan
+3. Tekan **🎲** untuk membuat **Kode Sinkronisasi** acak → tekan **📋** untuk menyalin → kirim ke pengguna satunya
    (misal lewat WhatsApp, lalu hapus pesannya).
 4. **💾 Simpan & Sambungkan** → lencana di pojok kanan atas berubah **"☁️ Tersinkron"** hijau.
    Data yang sudah ada di HP ini otomatis terunggah.
 
-Di **HP kedua**: ulangi langkah yang sama dengan **API Key, Project ID, dan ID Keluarga yang SAMA
+Di **HP kedua**: ulangi langkah yang sama dengan **API Key, Project ID, dan Kode Sinkronisasi yang SAMA
 PERSIS** → seluruh catatan langsung tergabung.
 
 ### Uji coba
 Catat satu pengeluaran di HP pertama → dalam ±2 detik muncul di HP kedua disertai notifikasi
-*"🔄 Ada catatan baru dari pasanganmu"*. Selesai! 🎉
+*"🔄 Ada catatan baru dari pengguna satunya"*. Selesai! 🎉
 
 ## 6. Hal yang Perlu Diketahui
 
 | Hal | Penjelasan |
 |---|---|
 | Butuh internet? | Hanya untuk sinkron. Tanpa internet aplikasi tetap jalan (tersimpan lokal) dan otomatis menyusul terkirim saat online. |
-| Apa saja yang tersinkron | Transaksi kalian berdua (termasuk rincian barang dari struk), kategori, batas pengeluaran masing-masing, nama kalian, catatan review, dan PIN (dalam bentuk teracak) sehingga berlaku sama di kedua HP. Pilihan "HP ini dipakai oleh" tetap per-HP. |
+| Apa saja yang tersinkron | Transaksi kedua pengguna (termasuk rincian barang dari struk), kategori, batas pengeluaran masing-masing, nama kalian, catatan review, dan PIN (dalam bentuk teracak) sehingga berlaku sama di kedua HP. Pilihan "HP ini dipakai oleh" tetap per-HP. |
 | Foto struk | Yang disimpan hanya **rincian barangnya**, bukan file fotonya — supaya penyimpanan HP tidak cepat penuh. |
 | Tampilan | Selalu satu orang pada satu waktu. Pengalih di atas layar untuk berganti orang; aplikasi selalu terbuka pada pemilik HP itu. |
 | Menghapus transaksi | Terhapus di kedua HP. |
-| "Hapus SEMUA data" | Juga membersihkan data di cloud (HP pasangan ikut kosong) — hati-hati. |
+| "Hapus SEMUA data" | Juga membersihkan data di cloud (HP kedua ikut kosong) — hati-hati. |
 | Cadangan | **Atur → Data & Cadangan → Ekspor JSON** menghasilkan file cadangan yang bisa diimpor kembali kapan saja. |
 | Biaya | Paket gratis Firebase: 50.000 baca & 20.000 tulis per hari — jauh di atas kebutuhan rumah tangga. |
 | Coba-coba dulu | Saat data masih kosong ada tombol **🎬 Isi data contoh** untuk melihat semua fitur (termasuk Review) dengan data pura-pura. |
@@ -256,9 +259,9 @@ Hasil review yang disimpan sebagai PDF:
 
 - **Lencana "☁️ Gagal"** → periksa API Key/Project ID (salah ketik penyebab #1), pastikan Firestore
   sudah dibuat (Langkah B) dan rules sudah di-Publish.
-- **Catatan tidak muncul di HP pasangan** → pastikan **ID Keluarga sama persis** di kedua HP
+- **Catatan tidak muncul di HP kedua** → pastikan **Kode Sinkronisasi sama persis** di kedua HP
   (huruf besar/kecil berpengaruh).
-- **ID Keluarga bocor?** → di salah satu HP buat ID baru dengan 🎲 → Simpan & Sambungkan
-  (data terunggah ulang ke "brankas" baru) → perbarui ID di HP pasangan.
+- **Kode Sinkronisasi bocor?** → di salah satu HP buat ID baru dengan 🎲 → Simpan & Sambungkan
+  (data terunggah ulang ke "brankas" baru) → perbarui ID di HP kedua.
 - **Ganti HP** → install aplikasi di HP baru → isi konfigurasi sinkron yang sama → semua data
   turun sendiri dari cloud. Tanpa sinkron: gunakan Ekspor/Impor JSON.

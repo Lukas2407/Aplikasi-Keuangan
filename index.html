@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Keuangan Berdua — Catatan Keuangan Bulanan untuk 2 Orang</title>
+<title>Catatan Keuangan — Pencatatan Bulanan untuk 2 Orang</title>
 <meta name="description" content="Aplikasi catatan keuangan bulanan untuk dua orang di dua HP berbeda: pemasukan, pengeluaran, anggaran per kategori, sinkronisasi real-time, dan review setiap bulan.">
 <meta name="theme-color" content="#5b5bd6">
 <link rel="manifest" href="manifest.webmanifest">
@@ -140,6 +140,14 @@ input:focus,select:focus,textarea:focus{border-color:var(--pri); background:#fff
 .scantotal{text-align:right; font-size:15px; margin-top:10px; padding-top:8px; border-top:1px solid var(--line)}
 .btn.big{padding:16px; font-size:15.5px}
 /* aksi cepat di Beranda */
+/* mode lihat saja */
+.robar{display:flex; align-items:center; gap:10px; background:#eef1f8; border:1px solid #d9dfee;
+  border-radius:14px; padding:10px 12px; margin-bottom:10px}
+.robar .ri{font-size:20px} .robar .rt{flex:1; font-size:13px}
+.vtx{border:1px solid var(--line); border-radius:14px; padding:14px; background:#fbfbfe}
+.vamt{font-size:26px; font-weight:800; text-align:center; margin-bottom:10px}
+.vamt.in{color:var(--in)} .vamt.out{color:var(--out)}
+.vrow{display:flex; justify-content:space-between; gap:12px; font-size:13.5px; padding:5px 0; border-top:1px solid var(--line)}
 .quick{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px}
 .quick button{
   display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 8px;
@@ -267,7 +275,7 @@ a{color:var(--pri)}
 
 <header>
   <span class="logo">£</span>
-  <h1>Keuangan Berdua</h1>
+  <h1>Catatan Keuangan</h1>
   <span id="syncDot" class="syncdot">☁️ Lokal</span>
 </header>
 
@@ -288,7 +296,7 @@ a{color:var(--pri)}
 <script>
 'use strict';
 /* =====================================================================
-   Keuangan Berdua — catatan keuangan bulanan untuk 2 orang, 2 HP.
+   Catatan Keuangan — pencatatan bulanan untuk 2 orang, 2 HP.
    Satu file, tanpa server sendiri. Data tersimpan lokal (localStorage)
    dan bisa disinkronkan real-time antar HP lewat Firebase milik sendiri
    (pola yang sama dengan aplikasi Warung COGS di repo ini).
@@ -366,9 +374,14 @@ async function sha256(s){
 }
 const pinOf=who=>((S.settings.pin||{})[who])||'';
 const anyPin=()=>!!(pinOf('a')||pinOf('b'));
-/* status buka-kunci hanya untuk sesi ini, tidak pernah disimpan */
-const SESSION={unlocked:{a:false,b:false}, lastAct:Date.now()};
-const isUnlocked=who=>!pinOf(who)||SESSION.unlocked[who];
+/* Status sesi, tidak pernah disimpan. Satu sesi terikat pada SATU orang:
+   siapa pun yang membuka kunci hanya bisa mengubah catatan miliknya sendiri.
+   Catatan orang satunya tetap bisa dibuka, tetapi hanya untuk dilihat. */
+const SESSION={authAs:null, lastAct:Date.now()};
+const authUser=()=>SESSION.authAs;
+/* boleh mengubah catatan `who`? tanpa PIN sama sekali, aplikasi terbuka seperti biasa */
+const canEdit=who=>!anyPin()||SESSION.authAs===(who||UI.who);
+const viewOnly=()=>!canEdit(UI.who);
 
 /* ---------- kategori bawaan ---------- */
 function defaultCats(){return [
@@ -399,6 +412,8 @@ function mergeNewCats(){
 }
 
 /* ---------- state ---------- */
+/* Nama kunci penyimpanan & jalur Firestore sengaja dipertahankan apa adanya
+   supaya data lama dan aturan Firestore yang sudah dipublikasikan tetap berlaku. */
 const LSK='keuanganBerdua.v1';      // data bersama (ikut tersinkron)
 const LSL='keuanganBerdua.loc.v1';  // khusus perangkat ini (identitas HP)
 let S={ settings:{nameA:'Orang 1', nameB:'Orang 2', currency:'GBP', limitTotal:{a:0,b:0}, pin:{a:'',b:''}, autolock:true, sync:{enabled:false, apiKey:'', projectId:'', coupleId:''}}, categories:defaultCats(), tx:[], reviews:{} };
@@ -463,14 +478,11 @@ const UI={ tab:'home', month:mkeyNow(), who:'a', f:{type:'all', cat:'all', q:''}
 window.go=t=>{ UI.tab=t; render(); window.scrollTo(0,0); };
 window.chMonth=d=>{ UI.month=mAdd(UI.month,d); render(); };
 window.goReview=k=>{ UI.month=k; go('review'); };
-window.setWho=w=>{
-  if(!isUnlocked(w)) return askPinFor(w, ()=>{ UI.who=w; render(); window.scrollTo(0,0); });
-  UI.who=w; render(); window.scrollTo(0,0);
-};
+window.setWho=w=>{ UI.who=w; render(); window.scrollTo(0,0); };
 const monthSel=()=>`<div class="msel"><button class="mbtn" onclick="chMonth(-1)">‹</button><div class="mlab">${esc(mLabel(UI.month))}</div><button class="mbtn" onclick="chMonth(1)">›</button></div>`;
 /* pengalih orang — hanya satu orang yang datanya tampil pada satu waktu */
 const personSel=()=>`<div class="seg persw">
-  ${['a','b'].map(w=>`<button class="${UI.who===w?'on p'+w:''}" onclick="setWho('${w}')">${!isUnlocked(w)?'🔒 ':''}${esc(nameOf(w))}${L.me===w?' · Saya':''}</button>`).join('')}
+  ${['a','b'].map(w=>`<button class="${UI.who===w?'on p'+w:''}" onclick="setWho('${w}')">${esc(nameOf(w))}${authUser()===w?' · Saya':(anyPin()?' 👁️':'')}</button>`).join('')}
 </div>`;
 const viewedLabel=()=>UI.who===L.me?'Keuanganmu':'Keuangan '+nameOf(UI.who);
 
@@ -479,6 +491,7 @@ const viewedLabel=()=>UI.who===L.me?'Keuanganmu':'Keuangan '+nameOf(UI.who);
    ===================================================================== */
 function render(){
   $$('nav button[data-tab]').forEach(b=>b.classList.toggle('on', b.dataset.tab===UI.tab));
+  document.querySelector('.fab').style.visibility = viewOnly() ? 'hidden' : 'visible';
   const v=$('#view');
   if(UI.tab==='home') v.innerHTML=vHome();
   else if(UI.tab==='hist') v.innerHTML=vHist();
@@ -497,25 +510,26 @@ function vHome(){
       <div class="bt"><b>Waktunya review bulanan!</b><br><span class="mut small">Keuangan ${esc(mLabel(prev))} belum direview.</span></div>
       <button class="btn sm" onclick="goReview('${prev}')">Mulai</button></div>`;
   }
-  h+=personSel();
-  h+=`<div class="small mut" style="margin:2px 2px 8px">${mine?`Halo, <b>${esc(nameOf(w))}</b> 👋`:`Kamu sedang melihat catatan <b>${esc(nameOf(w))}</b> 👀`}</div>`;
+  h+=personSel()+roBanner();
+  if(mine) h+=`<div class="small mut" style="margin:2px 2px 8px">Halo, <b>${esc(nameOf(w))}</b> 👋</div>`;
+  else if(!viewOnly()) h+=`<div class="small mut" style="margin:2px 2px 8px">Kamu sedang melihat catatan <b>${esc(nameOf(w))}</b></div>`;
   h+=monthSel();
   h+=`<div class="sumgrid">
     <div class="sum in"><div class="t">Pemasukan</div><div class="v">${rp(s.inn)}</div></div>
     <div class="sum out"><div class="t">Pengeluaran</div><div class="v">${rp(s.out)}</div></div>
     <div class="sum net ${s.net<0?'minus':''}"><div><div class="t">Sisa bulan ini</div><div class="v">${rpS(s.net)}</div></div><div style="font-size:30px">${s.net<0?'😰':'💰'}</div></div>
   </div>
-  <div class="quick">
+  ${viewOnly()?'':`<div class="quick">
     <button onclick="openTx()"><span class="i">➕</span>Catat cepat</button>
     <button onclick="openScan()"><span class="i">📷</span>Scan struk</button>
-  </div>`;
+  </div>`}`;
   // batas total pengeluaran bulan ini
   const tl=totalLimit(w);
   if(tl>0){
     const pct=Math.round(s.out/tl*100), left=tl-s.out, dl=daysLeft(k);
     const cls=s.out>tl?'over':(s.out>tl*.8?'warn':'');
     h+=`<div class="card" style="margin-top:12px"><h2>🎯 Batas Pengeluaran Bulan Ini
-      <button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">Atur</button></h2>
+      ${viewOnly()?'':`<button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">Atur</button>`}</h2>
       <div class="top" style="display:flex;justify-content:space-between;font-size:13.5px"><span>Terpakai <b>${rp(s.out)}</b> dari ${rp(tl)}</span><b class="${cls==='over'?'':''}" style="color:${s.out>tl?'var(--out)':'var(--ink)'}">${pct}%</b></div>
       <div class="bar" style="margin-top:6px"><i class="${cls}" style="width:${Math.min(100,pct)}%"></i></div>
       ${left>=0
@@ -529,7 +543,7 @@ function vHome(){
   const orphan=Object.keys(s.byCatOut).filter(id=>!S.categories.some(c=>c.id===id));
   for(const id of orphan) rows.push({c:cat(id), spent:s.byCatOut[id]});
   h+=`<div class="card" style="margin-top:12px"><h2>📊 Pengeluaran per Kategori
-    <button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">🎯 Batas</button></h2>`;
+    ${viewOnly()?'':`<button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">🎯 Batas</button>`}</h2>`;
   if(!rows.length) h+=`<div class="empty"><div class="e">🌱</div>Belum ada pengeluaran bulan ini.<br><span class="tiny">Atur batas pengeluaranmu lewat tombol <b>🎯 Batas</b> di atas.</span></div>`;
   else{
     const mx=Math.max(...rows.map(x=>Math.max(x.spent, monthLimit(x.c,w,k))),1);
@@ -571,7 +585,7 @@ window.setF=(key,val)=>{ UI.f[key]=val; render(); };
 window.setQ=el=>{ UI.f.q=el.value; drawHistList(); };
 function vHist(){
   const s=sums(UI.month,UI.who);
-  let h=personSel()+monthSel();
+  let h=personSel()+roBanner()+monthSel();
   h+=`<div class="chips">
     <button class="chip ${UI.f.type==='all'?'on':''}" onclick="setF('type','all')">Semua</button>
     <button class="chip ${UI.f.type==='in'?'on':''}" onclick="setF('type', UI.f.type==='in'?'all':'in')">⬇️ Masuk</button>
@@ -616,7 +630,7 @@ function deltaBadge(d,goodWhenDown){
 }
 /* ---------- grafik pemasukan vs pengeluaran (SVG, tanpa pustaka luar) ----------
    Kolom berkelompok: satu kelompok per bulan, hijau = masuk, merah = keluar.
-   Pasangan hijau/merah termasuk sulit dibedakan pada buta warna deutan, jadi
+   Kombinasi hijau/merah termasuk sulit dibedakan pada buta warna deutan, jadi
    identitasnya diperkuat tiga lapis: urutan posisi tetap (masuk selalu kiri),
    legenda, dan arsiran pada batang pengeluaran. */
 function niceMax(v){
@@ -671,7 +685,7 @@ function vReview(){
     <div class="ps">${esc(nameOf(w))} · ${esc(mLabel(k))} · dicetak ${new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}</div>
   </div>`;
   h+=`<div class="small mut noprint" style="margin:2px 2px 8px">📋 Review bulanan ${esc(nameOf(w))} — lihat rapor masing-masing, lalu tulis kesepakatan bersama di bawah.</div>`;
-  h+=personSel()+monthSel();
+  h+=personSel()+roBanner()+monthSel();
   // riwayat 6 bulan
   h+=`<div class="mhist noprint" style="margin-bottom:12px">`+
     [...Array(6)].map((_,i)=>{const mk=mAdd(mkeyNow(),-(5-i)); const done=S.reviews[mk]&&S.reviews[mk].done;
@@ -722,7 +736,7 @@ function vReview(){
     .map(c=>({c,spent:s.byCatOut[c.id]||0})).sort((x,y)=>y.spent-x.spent);
   if(tlim>0||brows.length){
     h+=`<div class="card"><h2>🎯 Batas vs Realisasi
-      <button class="btn ghost sm noprint" style="margin-left:auto" onclick="openLimits()">Atur</button></h2>`;
+      ${viewOnly()?'':`<button class="btn ghost sm noprint" style="margin-left:auto" onclick="openLimits()">Atur</button>`}</h2>`;
     if(tlim>0){
       h+=`<div class="crow"><div class="top"><span>${s.out<=tlim?'✅':'❌'} <b>Batas total bulanan</b></span>
         <b>${rp(s.out)}<span class="mut tiny"> / ${rp(tlim)}</span></b></div>
@@ -744,19 +758,24 @@ function vReview(){
     h+=`<div class="card"><h2>🔥 5 Pengeluaran Terbesar</h2>${top.map(txRow).join('')}</div>`;
   }
   // catatan review + tandai selesai
+  if(viewOnly()){
+    h+=`<div class="card"><h2>✍️ Catatan & Kesepakatan Review</h2>
+      ${rv.note?`<div class="noteprint" style="display:block">${esc(rv.note)}</div>`:'<div class="small mut">(belum ada catatan)</div>'}
+      <div class="tiny mut" style="margin-top:8px">Catatan ini bisa kamu tulis dari tampilan catatanmu sendiri.</div></div>`;
+  }
   h+=`<div class="card noprint"><h2>📄 Simpan Review sebagai PDF</h2>
     <p class="small mut" style="margin:0 0 10px">Menyusun laporan rapi berisi grafik, angka, batas, dan catatan kesepakatan
       untuk ${esc(nameOf(w))} bulan ${esc(mLabel(k))}. Pada dialog cetak yang muncul, pilih tujuan
       <b>“Simpan sebagai PDF”</b> (Android: <i>Save as PDF</i>, iPhone: cubit-perbesar lalu Bagikan).</p>
     <button class="btn" onclick="printReview()">📄 Buat PDF Review</button></div>`;
-  h+=`<div class="card"><h2>✍️ Catatan & Kesepakatan Review</h2>
+  if(!viewOnly()) h+=`<div class="card"><h2>✍️ Catatan & Kesepakatan Review</h2>
     ${rv.done?`<div class="donebadge">✅ Review ${esc(mLabel(k))} selesai — ditandai oleh ${esc(nameOf(rv.by||'a'))}${rv.doneAt?', '+new Date(rv.doneAt).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):''}</div>`:''}
     <textarea class="noprint" id="revNote" rows="4" placeholder="Tulis hasil diskusi kalian… contoh: 'Bulan depan jatah ngopi dikurangi separuh', 'Naikkan setoran tabungan bulanan'." oninput="revNote('${k}',this)">${esc(rv.note||'')}</textarea>
     <div class="printonly noteprint">${rv.note?esc(rv.note):'(belum ada catatan)'}</div>
     <div class="noprint" style="margin-top:10px">${rv.done
       ?`<button class="btn ghost" onclick="revDone('${k}',true)">↩️ Buka lagi review ini</button>`
       :`<button class="btn green" onclick="revDone('${k}',false)">✅ Tandai Review Selesai (oleh ${esc(nameOf(L.me))})</button>`}</div>
-    <div class="tiny mut noprint" style="margin-top:8px">Catatan ini ikut tersinkron, jadi pasanganmu bisa membacanya di HP-nya.</div></div>`;
+    <div class="tiny mut noprint" style="margin-top:8px">Catatan ini ikut tersinkron, jadi pengguna satunya bisa membacanya di HP-nya.</div></div>`;
   return h;
 }
 window.printReview=()=>{
@@ -770,9 +789,10 @@ window.revNote=(k,el)=>{
   _rnT=setTimeout(()=>{ const r=S.reviews[k]||(S.reviews[k]={}); r.note=el.value; r.at=Date.now(); save(); queueSync('reviews'); },500);
 };
 window.revDone=(k,reopen)=>{
+  if(!needEdit(UI.who)) return;
   const r=S.reviews[k]||(S.reviews[k]={});
   const note=$('#revNote'); if(note){ r.note=note.value; }
-  r.done=!reopen; r.by=L.me; r.at=Date.now(); r.doneAt=r.done?Date.now():null;
+  r.done=!reopen; r.by=authUser()||L.me; r.at=Date.now(); r.doneAt=r.done?Date.now():null;
   save(); queueSync('reviews'); render();
   toast(r.done?'🎉 Review '+mLabel(k)+' selesai!':'Review dibuka kembali.');
 };
@@ -785,19 +805,28 @@ function vSet(){
       <div class="n">${esc(c.name)}${t==='out'?`<div class="b">Batas ${esc(nameOf(UI.who))}: ${budgetOf(c,UI.who)>0?limitLabel(c,UI.who):'belum diatur'}</div>`:''}</div>
       <button class="iconbtn" onclick="openCat('${esc(c.id)}')">✏️</button></div>`).join('');
   const tl=totalLimit(UI.who), hasPin=!!pinOf(UI.who);
+  if(viewOnly()) return roBanner()+`
+    <div class="card"><h2>👁️ Pengaturan Terbatas</h2>
+      <p class="small mut" style="margin:0 0 10px">Kamu masuk sebagai <b>${esc(nameOf(authUser()))}</b> dan sedang melihat
+        catatan <b>${esc(nameOf(UI.who))}</b>. Kunci, batas pengeluaran, dan kategori hanya bisa diatur oleh pemiliknya sendiri.</p>
+      <button class="btn" onclick="setWho('${authUser()}')">← Kembali ke catatanku</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="switchUser()">🔁 Ganti pengguna</button>
+    </div>`;
   return `
   <div class="card"><h2>🔒 Kunci Pribadi</h2>
-    <p class="small mut" style="margin:0 0 10px">Catatan <b>${esc(nameOf(UI.who))}</b> hanya bisa dibuka dengan PIN miliknya —
-      termasuk saat pasangan mencoba berpindah ke catatanmu di HP mana pun.</p>
+    <p class="small mut" style="margin:0 0 10px">Catatan <b>${esc(nameOf(UI.who))}</b> hanya bisa dibuka dengan PIN miliknya.
+      Setelah masuk, kamu hanya bisa mengubah catatanmu sendiri — catatan orang satunya tetap bisa dilihat, tetapi tidak bisa diedit.</p>
     <div class="srow"><span style="font-size:19px">${hasPin?'🔐':'🔓'}</span>
       <div class="n">Status<div class="b">${hasPin?'Terkunci dengan PIN':'Belum dikunci — siapa pun bisa membuka'}</div></div></div>
     ${hasPin?`<div class="srow"><span style="font-size:19px">⏱️</span>
       <div class="n">Kunci otomatis<div class="b">${S.settings.autolock!==false?'Aktif — setelah 5 menit menganggur':'Nonaktif'}</div></div>
       <button class="btn ghost sm" onclick="toggleAutolock()">${S.settings.autolock!==false?'Matikan':'Aktifkan'}</button></div>`:''}
     <button class="btn" style="margin-top:12px" onclick="openPin()">${hasPin?'🔑 Ganti / Hapus PIN':'🔒 Pasang PIN untuk '+esc(nameOf(UI.who))}</button>
-    ${hasPin?`<button class="btn ghost" style="margin-top:8px" onclick="lockNow()">🔒 Kunci sekarang</button>`:''}
+    ${anyPin()?`<button class="btn ghost" style="margin-top:8px" onclick="lockNow()">🔒 Kunci sekarang</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="switchUser()">🔁 Ganti pengguna</button>
+    <div class="tiny mut" style="margin-top:10px">Satu sesi hanya untuk satu orang: setelah masuk dengan PIN, catatan orang satunya bisa dilihat tetapi tidak bisa diubah.</div>`:''}
   </div>`+`
-  <div class="card"><h2>👥 Profil Berdua</h2>
+  <div class="card"><h2>👥 Profil Pengguna</h2>
     <div class="grid2">
       <div class="field"><label>Nama orang ke-1</label><input id="setNameA" value="${esc(S.settings.nameA)}" onchange="saveNames()"></div>
       <div class="field"><label>Nama orang ke-2</label><input id="setNameB" value="${esc(S.settings.nameB)}" onchange="saveNames()"></div>
@@ -807,14 +836,14 @@ function vSet(){
         <button class="${L.me==='a'?'on':''}" onclick="setMe('a')">${esc(nameOf('a'))}</button>
         <button class="${L.me==='b'?'on':''}" onclick="setMe('b')">${esc(nameOf('b'))}</button>
       </div>
-      <div class="tiny mut" style="margin-top:6px">Pilihan ini hanya untuk HP ini — di HP pasanganmu pilih nama yang satunya.</div>
+      <div class="tiny mut" style="margin-top:6px">Pilihan ini hanya untuk HP ini — di HP satunya pilih nama yang lain.</div>
     </div>
     <div class="field"><label>Mata uang</label>
       <div class="seg">
         <button class="${S.settings.currency!=='IDR'?'on':''}" onclick="setCur('GBP')">£ Poundsterling</button>
         <button class="${S.settings.currency==='IDR'?'on':''}" onclick="setCur('IDR')">Rp Rupiah</button>
       </div>
-      <div class="tiny mut" style="margin-top:6px">Berlaku untuk kalian berdua (ikut tersinkron). Nominal yang sudah tercatat tidak dikonversi otomatis.</div>
+      <div class="tiny mut" style="margin-top:6px">Berlaku untuk kedua pengguna (ikut tersinkron). Nominal yang sudah tercatat tidak dikonversi otomatis.</div>
     </div>
   </div>
 
@@ -834,18 +863,18 @@ function vSet(){
   </div>
 
   <div class="card"><h2>☁️ Sinkronisasi 2 HP</h2>
-    <p class="small mut" style="margin:0 0 10px">Hubungkan HP kalian berdua supaya setiap catatan langsung muncul di HP satunya (real-time).
+    <p class="small mut" style="margin:0 0 10px">Hubungkan kedua HP supaya setiap catatan langsung muncul di HP satunya (real-time).
     Butuh akun <b>Firebase gratis</b> — ikuti <b>PANDUAN_KEUANGAN.md</b> di repo (±5 menit, sekali saja).</p>
     <div class="field"><label><input type="checkbox" id="syOn" style="width:auto" ${sy.enabled?'checked':''}> &nbsp;Aktifkan sinkronisasi cloud</label></div>
     <div class="field"><label>Firebase API Key</label><input id="syApi" value="${esc(sy.apiKey||'')}" placeholder="AIza…" autocomplete="off"></div>
     <div class="field"><label>Firebase Project ID</label><input id="syProj" value="${esc(sy.projectId||'')}" placeholder="cth: keuangan-kita"></div>
-    <div class="field"><label>ID Keluarga (harus sama persis di kedua HP)</label>
+    <div class="field"><label>Kode Sinkronisasi (harus sama persis di kedua HP)</label>
       <div style="display:flex;gap:8px">
         <input id="syCid" value="${esc(sy.coupleId||'')}" placeholder="klik 🎲 untuk membuat" autocomplete="off">
         <button class="iconbtn" style="flex:none" title="Buat ID acak" onclick="$('#syCid').value='kb-'+rid(18)">🎲</button>
         <button class="iconbtn" style="flex:none" title="Salin" onclick="copyCid()">📋</button>
       </div>
-      <div class="tiny mut" style="margin-top:6px">ID ini seperti kunci brankas — jangan bagikan ke orang lain selain pasanganmu.</div>
+      <div class="tiny mut" style="margin-top:6px">Kode ini seperti kunci brankas — jangan bagikan ke siapa pun di luar kedua HP ini.</div>
     </div>
     <button class="btn" onclick="syncSave()">💾 Simpan & Sambungkan</button>
     <div id="syStatus" class="small mut" style="margin-top:8px">${SYNC.on?'☁️ Tersinkron':'☁️ Belum tersambung (data hanya di HP ini)'}</div>
@@ -865,9 +894,9 @@ function vSet(){
   <div class="card"><h2>📲 Cara Pakai di 2 HP</h2>
     <ol class="small" style="margin:0 0 10px; padding-left:20px; color:var(--ink)">
       <li style="margin-bottom:6px"><b>Pasang di HP ini</b> — Android (Chrome): menu ⋮ → <i>Tambahkan ke layar utama</i> / <i>Instal aplikasi</i>. iPhone (Safari): tombol Bagikan ⬆️ → <i>Tambah ke Layar Utama</i>.</li>
-      <li style="margin-bottom:6px"><b>Kirim link aplikasi ke HP pasangan</b> (tombol di bawah), lalu pasang dengan cara yang sama.</li>
-      <li style="margin-bottom:6px"><b>Di HP pasangan</b>: isi nama kalian berdua yang sama, dan pilih "HP ini dipakai oleh" = dirinya.</li>
-      <li><b>Sambungkan keduanya</b> lewat kartu <b>☁️ Sinkronisasi 2 HP</b> di atas — isi API Key, Project ID, dan <b>ID Keluarga yang sama persis</b> di kedua HP. Setelah itu semua catatan &amp; progress kalian tampil di dua-duanya secara real-time.</li>
+      <li style="margin-bottom:6px"><b>Kirim link aplikasi ke HP kedua</b> (tombol di bawah), lalu pasang dengan cara yang sama.</li>
+      <li style="margin-bottom:6px"><b>Di HP kedua</b>: isi kedua nama yang sama, lalu pilih "HP ini dipakai oleh" = pemilik HP itu.</li>
+      <li><b>Sambungkan keduanya</b> lewat kartu <b>☁️ Sinkronisasi 2 HP</b> di atas — isi API Key, Project ID, dan <b>Kode Sinkronisasi yang sama persis</b> di kedua HP. Setelah itu semua catatan &amp; progress kalian tampil di dua-duanya secara real-time.</li>
     </ol>
     <div class="grid2">
       <button class="btn ghost" onclick="shareApp()">📤 Bagikan link</button>
@@ -885,24 +914,26 @@ window.setCur=c=>{ S.settings.currency=c; save(); queueSync('settings'); render(
 window.toggleAutolock=()=>{ S.settings.autolock=S.settings.autolock===false; save(); queueSync('settings'); render(); };
 const appUrl=()=>location.href.split('#')[0].split('?')[0];
 window.shareApp=async()=>{
-  if(location.protocol==='file:') return toast('Aplikasi belum di-hosting — kirim file index.html ke HP pasangan.');
-  if(navigator.share){ try{ await navigator.share({title:'Keuangan Berdua', text:'Pasang aplikasi keuangan kita di HP-mu:', url:appUrl()}); }catch(e){/* dibatalkan */} }
+  if(location.protocol==='file:') return toast('Aplikasi belum di-hosting — kirim file index.html ke HP kedua.');
+  if(navigator.share){ try{ await navigator.share({title:'Catatan Keuangan', text:'Pasang aplikasi catatan keuangan di HP-mu:', url:appUrl()}); }catch(e){/* dibatalkan */} }
   else copyAppLink();
 };
 window.copyAppLink=()=>{
-  if(location.protocol==='file:') return toast('Aplikasi belum di-hosting — kirim file index.html ke HP pasangan.');
+  if(location.protocol==='file:') return toast('Aplikasi belum di-hosting — kirim file index.html ke HP kedua.');
   (navigator.clipboard?navigator.clipboard.writeText(appUrl()):Promise.reject())
-    .then(()=>toast('🔗 Link disalin — kirim ke pasanganmu.'), ()=>toast(appUrl()));
+    .then(()=>toast('🔗 Link disalin — kirim ke HP kedua.'), ()=>toast(appUrl()));
 };
 window.copyCid=()=>{
-  const v=$('#syCid').value.trim(); if(!v) return toast('Belum ada ID.');
-  (navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>toast('📋 ID disalin — kirim ke pasanganmu.'),()=>toast('Salin manual: '+v));
+  const v=$('#syCid').value.trim(); if(!v) return toast('Belum ada kode.');
+  (navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>toast('📋 Kode disalin — kirim ke HP kedua.'),()=>toast('Salin manual: '+v));
 };
 
 /* ---------- modal transaksi ---------- */
 const MT={};
 window.openTx=id=>{
   const t=id?S.tx.find(x=>x.id===id):null;
+  if(t&&!canEdit(whoOf(t))) return viewTx(t);
+  if(!t&&!needEdit(UI.who)) return;
   MT.id=t?t.id:null;
   MT.type=t?t.type:'out';
   MT.catId=t?t.catId:'';
@@ -978,7 +1009,7 @@ window.saveTx=()=>{
   toast(warn || (t.type==='in'?'💰 Pemasukan dicatat!':'💸 Pengeluaran dicatat!'));
 };
 window.delTx=id=>{
-  if(!confirm('Hapus transaksi ini? (terhapus juga di HP pasangan)')) return;
+  if(!confirm('Hapus transaksi ini? (terhapus juga di HP satunya)')) return;
   S.tx=S.tx.filter(x=>x.id!==id);
   save(); deleteTxCloud(id);
   closeModal(); render(); toast('🗑️ Transaksi dihapus.');
@@ -1110,6 +1141,7 @@ function prepImage(file){
 /* --- layar pemindai --- */
 const SCAN={items:[], date:todayStr(), note:''};
 window.openScan=()=>{
+  if(!needEdit(UI.who)) return;
   SCAN.items=[]; SCAN.date=todayStr(); SCAN.note='';
   drawScanStart();
   openModal();
@@ -1234,12 +1266,13 @@ window.scanSave=split=>{
 /* ---------- modal batas pengeluaran (semua batas dalam satu layar) ---------- */
 window.openLimits=()=>{
   const w=UI.who;
+  if(!needEdit(w)) return;
   const cats=S.categories.filter(c=>c.type==='out');
   const perSel=(c)=>`<select id="lp_${esc(c.id)}">${Object.keys(PERIODS).map(p=>
     `<option value="${p}" ${periodOf(c,w)===p?'selected':''}>${PERIODS[p].lab}</option>`).join('')}</select>`;
   $('#modal').innerHTML=`
   <h3>🎯 Batas Pengeluaran<button class="x" onclick="closeModal()">✕</button></h3>
-  <div class="owner ${w}">Batas milik <b>${esc(nameOf(w))}</b>${w===L.me?' (kamu)':''} — pasanganmu punya batasnya sendiri.</div>
+  <div class="owner ${w}">Batas milik <b>${esc(nameOf(w))}</b>${w===L.me?' (kamu)':''} — pengguna satunya punya batasnya sendiri.</div>
   <div class="field"><label>Batas total pengeluaran per bulan (kosong = tanpa batas)</label>
     <input id="lTotal" class="amount" style="font-size:20px;padding:11px" inputmode="${cur().dec?'decimal':'numeric'}"
       value="${amtStr(totalLimit(w))}" placeholder="${cur().sym.trim()} 0" oninput="fmtAmt(this)"></div>
@@ -1280,9 +1313,34 @@ function limitAlert(t){
   return msgs.length?'⚠️ '+msgs.join(' · '):'';
 }
 
+/* tampilan baca-saja untuk transaksi milik orang lain */
+function viewTx(t){
+  const c=cat(t.catId), items=Array.isArray(t.items)?t.items:[];
+  $('#modal').innerHTML=`
+  <h3>👁️ Rincian Transaksi<button class="x" onclick="closeModal()">✕</button></h3>
+  <div class="owner ${whoOf(t)}">Catatan <b>${esc(nameOf(whoOf(t)))}</b> — mode lihat saja, tidak bisa diubah dari sini.</div>
+  <div class="vtx">
+    <div class="vamt ${t.type}">${t.type==='in'?'+':'−'}${rp(t.amount)}</div>
+    <div class="vrow"><span class="mut">Kategori</span><b>${c.icon} ${esc(c.name)}</b></div>
+    <div class="vrow"><span class="mut">Tanggal</span><b>${esc(dLabel(t.date))}</b></div>
+    ${t.note?`<div class="vrow"><span class="mut">Catatan</span><b>${esc(t.note)}</b></div>`:''}
+  </div>
+  ${items.length?`<div class="itemlist" style="margin-top:12px">
+    <div class="ilh">🧾 Rincian belanja (${items.length} barang)</div>
+    ${items.map(x=>`<div class="ili"><span>${x.q>1?esc(x.q)+'× ':''}${esc(x.n)}</span><b>${rp(x.p)}</b></div>`).join('')}
+  </div>`:''}
+  <button class="btn ghost" style="margin-top:12px" onclick="closeModal()">Tutup</button>`;
+  openModal();
+}
+const roBanner=()=>viewOnly()?`<div class="robar">
+  <span class="ri">👁️</span>
+  <div class="rt"><b>Mode lihat saja</b><br><span class="tiny">Kamu masuk sebagai ${esc(nameOf(authUser()))}. Catatan ${esc(nameOf(UI.who))} hanya bisa diubah oleh ${esc(nameOf(UI.who))}.</span></div>
+  <button class="btn sm ghost" onclick="switchUser()">Ganti</button></div>`:'';
+
 /* ---------- modal kategori ---------- */
 const MC={};
 window.openCat=id=>{
+  if(!needEdit(UI.who)) return;
   const c=id?S.categories.find(x=>x.id===id):null;
   MC.id=c?c.id:null; MC.type=c?c.type:'out';
   drawCatModal(c);
@@ -1351,21 +1409,31 @@ function toast(msg){
    ===================================================================== */
 function lockScreen(){
   const el=$('#lock');
-  const who=pinOf(L.me)?L.me:(pinOf('a')?'a':'b');
+  const open=['a','b'].filter(w=>!pinOf(w));   // yang belum memasang PIN boleh masuk langsung
   el.innerHTML=`
     <div class="lockbox">
       <div class="lockicon">🔒</div>
-      <h2>${esc(nameOf(who))}${pinOf(L.me)&&who===L.me?'':''}</h2>
-      <p class="small mut" style="margin:2px 0 16px">Masukkan PIN untuk membuka catatanmu.</p>
+      <h2>Masuk</h2>
+      <p class="small mut" style="margin:2px 0 16px">Masukkan PIN-mu. Kamu akan masuk ke catatanmu sendiri,
+        dan hanya catatan itu yang bisa kamu ubah.</p>
       <input id="lockPin" type="password" inputmode="numeric" autocomplete="off" maxlength="12"
         placeholder="••••" class="pinin" onkeydown="if(event.key==='Enter')tryUnlock()">
       <div id="lockMsg" class="small" style="color:var(--out);font-weight:700;min-height:18px;margin:8px 0"></div>
       <button class="btn" onclick="tryUnlock()">Buka</button>
+      ${open.map(w=>`<button class="btn ghost" style="margin-top:8px" onclick="enterOpen('${w}')">Masuk sebagai ${esc(nameOf(w))} (belum berPIN)</button>`).join('')}
       <button class="btn ghost" style="margin-top:8px" onclick="forgotPin()">Lupa PIN?</button>
     </div>`;
   el.classList.add('on');
   setTimeout(()=>{const i=$('#lockPin'); if(i) i.focus();},80);
 }
+function enterAs(who){
+  SESSION.authAs=who; SESSION.lastAct=Date.now();
+  UI.who=who;
+  $('#lock').classList.remove('on');
+  render();
+  toast('🔓 Masuk sebagai '+nameOf(who));
+}
+window.enterOpen=w=>{ if(!pinOf(w)) enterAs(w); };
 window.tryUnlock=async()=>{
   const inp=$('#lockPin'), msg=$('#lockMsg');
   const v=(inp.value||'').trim();
@@ -1373,58 +1441,43 @@ window.tryUnlock=async()=>{
   const hash=await sha256(v);
   const who=['a','b'].find(w=>pinOf(w)&&pinOf(w)===hash);
   if(!who){ msg.textContent='PIN salah, coba lagi.'; inp.value=''; inp.focus(); return; }
-  SESSION.unlocked[who]=true; SESSION.lastAct=Date.now();
-  UI.who=who;
-  $('#lock').classList.remove('on');
-  render();
-  toast('🔓 Selamat datang, '+nameOf(who)+'!');
+  enterAs(who);
 };
 window.forgotPin=()=>{
-  const other=nameOf(L.me==='a'?'b':'a');
   alert('PIN tidak bisa dilihat kembali karena hanya tersimpan dalam bentuk teracak.\n\n'
     +'Yang bisa dilakukan:\n'
-    +'• Minta '+other+' membuka dengan PIN miliknya, lalu hapus/ganti PIN-mu lewat Atur → Kunci Pribadi.\n'
+    +'• Pengguna satunya masuk dengan PIN miliknya, lalu hapus PIN yang lupa lewat Atur → Kunci Pribadi.\n'
     +'• Atau pasang ulang aplikasi dan pulihkan dari file cadangan JSON.');
 };
 function lockNow(){
-  SESSION.unlocked={a:false,b:false};
+  SESSION.authAs=null;
   closeModal();
   if(anyPin()) lockScreen();
+  else render();
 }
 window.lockNow=lockNow;
+/* dipakai tombol "Ganti pengguna" — keluar lalu masuk sebagai orang lain */
+window.switchUser=()=>{
+  if(!anyPin()) return toast('Pasang PIN dulu supaya tiap orang punya akses sendiri.');
+  lockNow();
+};
+function needEdit(who){
+  if(canEdit(who)) return true;
+  toast('👁️ Mode lihat saja — hanya ' + nameOf(who||UI.who) + ' yang bisa mengubah catatan ini.');
+  return false;
+}
 /* kunci otomatis setelah 5 menit tanpa aktivitas */
 const AUTOLOCK_MS=5*60*1000;
 setInterval(()=>{
-  if(!anyPin()||S.settings.autolock===false) return;
+  if(!anyPin()||S.settings.autolock===false||!SESSION.authAs) return;
   if($('#lock').classList.contains('on')) return;
   if(Date.now()-SESSION.lastAct>AUTOLOCK_MS) lockNow();
 }, 20000);
 ['click','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{SESSION.lastAct=Date.now();},{passive:true}));
-/* minta PIN saat berpindah ke orang yang catatannya terkunci */
-function askPinFor(who, done){
-  $('#modal').innerHTML=`
-    <h3>🔒 Catatan ${esc(nameOf(who))}<button class="x" onclick="closeModal()">✕</button></h3>
-    <p class="small mut" style="margin:0 0 12px">Catatan ${esc(nameOf(who))} dilindungi PIN. Minta ${esc(nameOf(who))} memasukkannya untuk membuka.</p>
-    <input id="askPin" type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="••••" class="pinin"
-      onkeydown="if(event.key==='Enter')submitAskPin()">
-    <div id="askMsg" class="small" style="color:var(--out);font-weight:700;min-height:18px;margin:8px 0"></div>
-    <button class="btn" onclick="submitAskPin()">Buka</button>`;
-  openModal();
-  setTimeout(()=>{const i=$('#askPin'); if(i) i.focus();},80);
-  ASK.who=who; ASK.done=done;
-}
-const ASK={};
-window.submitAskPin=async()=>{
-  const v=($('#askPin').value||'').trim();
-  const hash=await sha256(v);
-  if(hash!==pinOf(ASK.who)){ $('#askMsg').textContent='PIN salah.'; $('#askPin').value=''; $('#askPin').focus(); return; }
-  SESSION.unlocked[ASK.who]=true;
-  closeModal();
-  if(ASK.done) ASK.done();
-};
 /* ---------- ganti / hapus PIN ---------- */
 window.openPin=()=>{
   const w=UI.who, has=!!pinOf(w);
+  if(!needEdit(w)) return;
   $('#modal').innerHTML=`
     <h3>🔒 Kunci Pribadi<button class="x" onclick="closeModal()">✕</button></h3>
     <div class="owner ${w}">PIN milik <b>${esc(nameOf(w))}</b>${w===L.me?' (kamu)':''} — hanya melindungi catatan ${esc(nameOf(w))}.</div>
@@ -1448,7 +1501,7 @@ window.savePin=async()=>{
   if(p1!==p2){ msg.textContent='Ulangan PIN tidak sama.'; return; }
   S.settings.pin=S.settings.pin||{a:'',b:''};
   S.settings.pin[w]=await sha256(p1);
-  SESSION.unlocked[w]=true;
+  SESSION.authAs=w;                     // yang baru memasang PIN otomatis jadi pemilik sesi
   save(); queueSync('settings');
   closeModal(); render(); toast('🔒 PIN tersimpan — catatan '+nameOf(w)+' kini terkunci.');
 };
@@ -1465,14 +1518,14 @@ window.removePin=async()=>{
 function firstSetup(){
   $('#modal').innerHTML=`
   <h3>👋 Selamat datang!</h3>
-  <p class="small mut" style="margin:0 0 12px">Aplikasi catatan keuangan bulanan untuk <b>dua orang, dua HP</b>.
-  Isi dulu nama kalian berdua:</p>
+  <p class="small mut" style="margin:0 0 12px">Aplikasi pencatatan keuangan bulanan untuk <b>dua orang, dua HP</b>.
+  Isi dulu nama kedua pengguna:</p>
   <div class="field"><label>Nama orang ke-1</label><input id="fsA" placeholder="cth: Lukas"></div>
   <div class="field"><label>Nama orang ke-2</label><input id="fsB" placeholder="cth: Sinta"></div>
   <div class="field"><label>HP ini dipakai oleh</label>
     <div class="seg"><button id="fsMa" class="on" onclick="fsMe('a')">Orang ke-1</button><button id="fsMb" onclick="fsMe('b')">Orang ke-2</button></div></div>
   <button class="btn" onclick="fsDone()">Mulai 🚀</button>
-  <div class="tiny mut" style="margin-top:10px">Nanti sambungkan kedua HP lewat menu <b>Atur → Sinkronisasi 2 HP</b> supaya catatannya jadi satu.</div>`;
+  <div class="tiny mut" style="margin-top:10px">Sambungkan kedua HP lewat menu <b>Atur → Sinkronisasi 2 HP</b> supaya catatannya jadi satu.</div>`;
   openModal();
 }
 window.fsMe=w=>{ L.me=w; $('#fsMa').classList.toggle('on',w==='a'); $('#fsMb').classList.toggle('on',w==='b'); };
@@ -1488,7 +1541,7 @@ window.fsDone=()=>{
 
 /* =====================================================================
    SINKRONISASI 2 HP (Firebase Firestore — akun milik pengguna sendiri).
-   Semua perangkat dengan ID Keluarga yang sama saling terhubung
+   Semua perangkat dengan Kode Sinkronisasi yang sama saling terhubung
    real-time. Panduan pembuatan akun: PANDUAN_KEUANGAN.md
    ===================================================================== */
 const SYNC={db:null, on:false, timers:{}};
@@ -1534,7 +1587,7 @@ window.syncSave=()=>{
   };
   save();
   if(S.settings.sync.enabled){
-    if(!S.settings.sync.apiKey||!S.settings.sync.projectId||!S.settings.sync.coupleId) return toast('Lengkapi API Key, Project ID, dan ID Keluarga dulu.');
+    if(!S.settings.sync.apiKey||!S.settings.sync.projectId||!S.settings.sync.coupleId) return toast('Lengkapi API Key, Project ID, dan Kode Sinkronisasi dulu.');
     location.reload(); // mulai bersih dengan konfigurasi baru
   }else{ SYNC.on=false; setSyncBadge('off'); toast('Sinkronisasi dimatikan — data tetap aman di HP ini.'); }
 };
@@ -1605,19 +1658,19 @@ function remoteRefresh(){
     setSyncBadge('on');
     if($('#overlay').classList.contains('open')) return; // jangan ganggu saat sedang mengisi form
     render();
-    toast('🔄 Ada catatan baru dari pasanganmu');
+    toast('🔄 Ada catatan baru dari HP satunya');
   },400);
 }
 
 /* ---------- ekspor / impor / demo / hapus ---------- */
 window.exportJson=()=>{
-  const data={app:'keuangan-berdua', version:1, exportedAt:new Date().toISOString(),
+  const data={app:'catatan-keuangan', version:1, exportedAt:new Date().toISOString(),
     settings:{nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency, limitTotal:S.settings.limitTotal, pin:S.settings.pin, autolock:S.settings.autolock},
     categories:S.categories, tx:S.tx, reviews:S.reviews};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download='keuangan-berdua-'+todayStr().replace(/-/g,'')+'.json';
+  a.download='catatan-keuangan-'+todayStr().replace(/-/g,'')+'.json';
   a.click(); URL.revokeObjectURL(a.href);
   toast('⬇️ Cadangan diunduh.');
 };
@@ -1639,7 +1692,7 @@ window.importJson=inp=>{
   r.readAsText(f);
 };
 window.wipeAll=async()=>{
-  if(!confirm('Hapus SEMUA data (transaksi, review, kategori) di HP ini'+(SYNC.on?' DAN di cloud (HP pasangan ikut terhapus)':'')+'?')) return;
+  if(!confirm('Hapus SEMUA data (transaksi, review, kategori) di HP ini'+(SYNC.on?' DAN di cloud (HP satunya ikut terhapus)':'')+'?')) return;
   if(!confirm('Yakin? Tindakan ini tidak bisa dibatalkan.')) return;
   if(SYNC.on){
     try{
@@ -1678,7 +1731,7 @@ window.fillDemo=()=>{
     mk(D(prv,22),'out','makan','b',A(9.50,65000),'Jajan kopi'),
     mk(D(prv,25),'out','keluarga','a',A(75,300000),'Kado orang tua'),
     mk(D(prv,27),'out','belanja','b',A(76,420000),'Belanja mingguan'),
-    mk(D(prv,28),'out','hiburan','a',A(55,150000),'Makan malam berdua'),
+    mk(D(prv,28),'out','hiburan','a',A(55,150000),'Makan malam di luar'),
     // bulan berjalan
     mk(D(cur_,1),'in','gaji','a',A(2400,5200000),'Gaji bulanan'),
     mk(D(cur_,1),'in','gaji','b',A(1900,4300000),'Gaji bulanan'),
@@ -1720,7 +1773,7 @@ if(PENDING_CATS) save();
 UI.who=L.me;               // tampilan selalu dibuka pada pemilik HP ini
 render();
 if(!L.setupDone) firstSetup();
-else{ saveL(); if(anyPin()&&!isUnlocked(L.me)) lockScreen(); }
+else{ saveL(); if(anyPin()) lockScreen(); }   // sesi baru selalu minta identitas dulu
 syncInit();
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
