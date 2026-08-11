@@ -225,7 +225,7 @@ PERSIS** → seluruh catatan langsung tergabung.
 
 ### Uji coba
 Catat satu pengeluaran di HP pertama → dalam ±2 detik muncul di HP kedua disertai notifikasi
-*"🔄 Ada catatan baru dari pengguna satunya"*. Selesai! 🎉
+*"🔄 Ada catatan baru dari HP satunya"*. Selesai! 🎉
 
 ## 6. Hal yang Perlu Diketahui
 
