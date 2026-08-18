@@ -1,4 +1,6 @@
-# £ Catatan Keuangan — Panduan Lengkap
+# Catatan Keuangan
+
+Panduan lengkap pemakaian.
 
 Aplikasi pencatatan keuangan bulanan **untuk dirimu sendiri**: pemasukan, pengeluaran, batas
 pengeluaran yang rinci, scan struk belanja, dan review setiap bulan lengkap dengan grafik yang bisa

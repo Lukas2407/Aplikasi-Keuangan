@@ -1,4 +1,4 @@
-# £ Catatan Keuangan — Pencatatan Bulanan Pribadi
+# Catatan Keuangan
 
 Aplikasi HP (PWA) untuk mencatat keuangan bulanan **pribadi**, dalam **poundsterling (£)**:
 pemasukan, pengeluaran, batas pengeluaran yang rinci, scan struk belanja, dan review setiap bulan

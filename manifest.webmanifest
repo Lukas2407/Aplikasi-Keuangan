@@ -1,6 +1,6 @@
 {
-  "name": "Catatan Keuangan — Pencatatan Bulanan Pribadi",
-  "short_name": "Keuangan",
+  "name": "Catatan Keuangan",
+  "short_name": "Catatan Keuangan",
   "description": "Catatan keuangan bulanan pribadi: pemasukan, pengeluaran, batas pengeluaran, scan struk, dan review bulanan dengan grafik.",
   "start_url": "./index.html",
   "scope": "./",
