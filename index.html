@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Catatan Keuangan — Pencatatan Bulanan untuk 2 Orang</title>
-<meta name="description" content="Aplikasi catatan keuangan bulanan untuk dua orang di dua HP berbeda: pemasukan, pengeluaran, anggaran per kategori, sinkronisasi real-time, dan review setiap bulan.">
+<meta name="description" content="Aplikasi pencatatan keuangan bulanan pribadi: pemasukan, pengeluaran, batas pengeluaran, scan struk belanja, dan review bulanan dengan grafik.">
 <meta name="theme-color" content="#5b5bd6">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png">
@@ -296,7 +296,7 @@ a{color:var(--pri)}
 <script>
 'use strict';
 /* =====================================================================
-   Catatan Keuangan — pencatatan bulanan untuk 2 orang, 2 HP.
+   Catatan Keuangan — pencatatan bulanan pribadi, bisa disinkronkan antar perangkat.
    Satu file, tanpa server sendiri. Data tersimpan lokal (localStorage)
    dan bisa disinkronkan real-time antar HP lewat Firebase milik sendiri
    (pola yang sama dengan aplikasi Warung COGS di repo ini).
@@ -372,16 +372,10 @@ async function sha256(s){
   }
   return sha256js(s);
 }
-const pinOf=who=>((S.settings.pin||{})[who])||'';
-const anyPin=()=>!!(pinOf('a')||pinOf('b'));
-/* Status sesi, tidak pernah disimpan. Satu sesi terikat pada SATU orang:
-   siapa pun yang membuka kunci hanya bisa mengubah catatan miliknya sendiri.
-   Catatan orang satunya tetap bisa dibuka, tetapi hanya untuk dilihat. */
-const SESSION={authAs:null, lastAct:Date.now()};
-const authUser=()=>SESSION.authAs;
-/* boleh mengubah catatan `who`? tanpa PIN sama sekali, aplikasi terbuka seperti biasa */
-const canEdit=who=>!anyPin()||SESSION.authAs===(who||UI.who);
-const viewOnly=()=>!canEdit(UI.who);
+const myPin=()=>S.settings.pin||'';
+const anyPin=()=>!!myPin();
+/* status sesi, tidak pernah disimpan */
+const SESSION={unlocked:false, lastAct:Date.now()};
 
 /* ---------- kategori bawaan ---------- */
 function defaultCats(){return [
@@ -416,25 +410,42 @@ function mergeNewCats(){
    supaya data lama dan aturan Firestore yang sudah dipublikasikan tetap berlaku. */
 const LSK='keuanganBerdua.v1';      // data bersama (ikut tersinkron)
 const LSL='keuanganBerdua.loc.v1';  // khusus perangkat ini (identitas HP)
-let S={ settings:{nameA:'Orang 1', nameB:'Orang 2', currency:'GBP', limitTotal:{a:0,b:0}, pin:{a:'',b:''}, autolock:true, sync:{enabled:false, apiKey:'', projectId:'', coupleId:''}}, categories:defaultCats(), tx:[], reviews:{} };
-let L={ me:'a', deviceId:rid(8), setupDone:false };
+let S={ settings:{name:'Saya', currency:'GBP', limitTotal:0, pin:'', autolock:true, sync:{enabled:false, apiKey:'', projectId:'', coupleId:''}}, categories:defaultCats(), tx:[], reviews:{} };
+let L={ deviceId:rid(8), setupDone:false };
+/* Data dari versi dua orang dilebur menjadi satu: seluruh transaksi tetap
+   dipakai, sedangkan nama, batas, dan PIN diambil dari orang pertama
+   (jatuh ke orang kedua bila yang pertama kosong). */
+function migrateToSingle(){
+  const st=S.settings; let changed=false;
+  if(typeof st.name!=='string'||!st.name){ st.name=st.nameA||st.nameB||'Saya'; changed=true; }
+  if('nameA' in st||'nameB' in st){ delete st.nameA; delete st.nameB; changed=true; }
+  if(st.limitTotal&&typeof st.limitTotal==='object'){ st.limitTotal=Number(st.limitTotal.a)||Number(st.limitTotal.b)||0; changed=true; }
+  if(st.pin&&typeof st.pin==='object'){ st.pin=st.pin.a||st.pin.b||''; changed=true; }
+  for(const c of S.categories){
+    if(c.budget&&typeof c.budget==='object'){ c.budget=Number(c.budget.a)||Number(c.budget.b)||0; changed=true; }
+    if(c.period&&typeof c.period==='object'){ c.period=c.period.a||c.period.b||'month'; changed=true; }
+  }
+  for(const t of S.tx) if('who' in t){ delete t.who; changed=true; }
+  return changed;
+}
 function load(){
-  try{const j=JSON.parse(localStorage.getItem(LSK)); if(j&&j.settings){S=j; S.tx=S.tx||[]; S.reviews=S.reviews||{}; S.categories=S.categories&&S.categories.length?S.categories:defaultCats(); S.settings.sync=S.settings.sync||{enabled:false,apiKey:'',projectId:'',coupleId:''}; S.settings.currency=S.settings.currency||'GBP'; S.settings.limitTotal=S.settings.limitTotal||{a:0,b:0}; S.settings.pin=S.settings.pin||{a:'',b:''}; S.settings.autolock=S.settings.autolock!==false;}}catch(e){}
+  try{const j=JSON.parse(localStorage.getItem(LSK)); if(j&&j.settings){S=j; S.tx=S.tx||[]; S.reviews=S.reviews||{}; S.categories=S.categories&&S.categories.length?S.categories:defaultCats(); S.settings.sync=S.settings.sync||{enabled:false,apiKey:'',projectId:'',coupleId:''}; S.settings.currency=S.settings.currency||'GBP'; S.settings.autolock=S.settings.autolock!==false;}}catch(e){}
   try{const j=JSON.parse(localStorage.getItem(LSL)); if(j&&j.deviceId)L=j;}catch(e){}
+  migrateToSingle();
 }
 function save(){ localStorage.setItem(LSK, JSON.stringify(S)); }
 function saveL(){ localStorage.setItem(LSL, JSON.stringify(L)); }
-const nameOf=w=>w==='b'?(S.settings.nameB||'Orang 2'):(S.settings.nameA||'Orang 1');
+const myName=()=>S.settings.name||'Saya';
 const cat=id=>S.categories.find(c=>c.id===id)||{id, name:'(kategori terhapus)', icon:'❓', type:'out', budget:0};
 
 /* ---------- kalkulasi bulanan ---------- */
-const whoOf=t=>t.who==='b'?'b':'a';
-/* Tampilan selalu satu orang: setiap hitungan disaring untuk orang yang
-   sedang dilihat (UI.who). Data tetap satu dan tersinkron antar HP. */
-const txMonth=(k,who)=>S.tx.filter(t=>(t.date||'').slice(0,7)===k && (!who||whoOf(t)===who));
-function sums(k,who){
+/* Aplikasi untuk satu orang: seluruh hitungan memakai semua catatan
+   yang ada, tanpa pemisahan pemilik. Data tetap bisa disinkronkan antar
+   perangkat milik orang yang sama. */
+const txMonth=k=>S.tx.filter(t=>(t.date||'').slice(0,7)===k);
+function sums(k){
   const r={inn:0,out:0,net:0,count:0,byCatOut:{},byCatIn:{}};
-  for(const t of txMonth(k,who)){
+  for(const t of txMonth(k)){
     const a=Number(t.amount)||0;
     r.count++;
     if(t.type==='in'){ r.inn+=a; r.byCatIn[t.catId]=(r.byCatIn[t.catId]||0)+a; }
@@ -443,29 +454,21 @@ function sums(k,who){
   r.net=r.inn-r.out;
   return r;
 }
-/* Anggaran disimpan per orang: {a:…, b:…}. Nilai lama berupa angka
-   tunggal tetap terbaca sebagai anggaran yang sama untuk keduanya. */
-const budgetOf=(c,who)=>{const b=c&&c.budget; return typeof b==='object'&&b?(Number(b[who])||0):(Number(b)||0);};
-function setBudgetOf(c,who,v){
-  if(typeof c.budget!=='object'||!c.budget){const old=Number(c.budget)||0; c.budget={a:old,b:old};}
-  c.budget[who]=v;
-}
+const budgetOf=c=>Number(c&&c.budget)||0;
+const setBudgetOf=(c,v)=>{ c.budget=Number(v)||0; };
 /* Batas pengeluaran bisa dipatok per hari, per minggu, atau per bulan.
    Semuanya dihitung ulang menjadi batas satu bulan penuh agar bisa
    dibandingkan dengan realisasi bulan berjalan. */
 const PERIODS={day:{lab:'per hari', short:'/hr'}, week:{lab:'per minggu', short:'/mgg'}, month:{lab:'per bulan', short:'/bln'}};
-const periodOf=(c,who)=>{const p=c&&c.period; const v=(typeof p==='object'&&p)?p[who]:p; return PERIODS[v]?v:'month';};
-function setPeriodOf(c,who,v){
-  if(typeof c.period!=='object'||!c.period){const old=PERIODS[c.period]?c.period:'month'; c.period={a:old,b:old};}
-  c.period[who]=PERIODS[v]?v:'month';
-}
-function monthLimit(c,who,mk){
-  const amt=budgetOf(c,who); if(amt<=0) return 0;
-  const per=periodOf(c,who), d=daysInMonth(mk);
+const periodOf=c=>{const v=c&&c.period; return PERIODS[v]?v:'month';};
+const setPeriodOf=(c,v)=>{ c.period=PERIODS[v]?v:'month'; };
+function monthLimit(c,mk){
+  const amt=budgetOf(c); if(amt<=0) return 0;
+  const per=periodOf(c), d=daysInMonth(mk);
   return per==='day'?amt*d : per==='week'?amt*d/7 : amt;
 }
-const limitLabel=(c,who)=>{const per=periodOf(c,who); return rp(budgetOf(c,who))+(per==='month'?'':' '+PERIODS[per].short);};
-const totalLimit=who=>Number((S.settings.limitTotal||{})[who])||0;
+const limitLabel=c=>{const per=periodOf(c); return rp(budgetOf(c))+(per==='month'?'':' '+PERIODS[per].short);};
+const totalLimit=()=>Number(S.settings.limitTotal)||0;
 /* sisa hari pada bulan berjalan (bulan lain dihitung penuh) */
 function daysLeft(mk){
   const d=daysInMonth(mk);
@@ -474,24 +477,17 @@ function daysLeft(mk){
 }
 
 /* ---------- state UI ---------- */
-const UI={ tab:'home', month:mkeyNow(), who:'a', f:{type:'all', cat:'all', q:''} };
+const UI={ tab:'home', month:mkeyNow(), f:{type:'all', cat:'all', q:''} };
 window.go=t=>{ UI.tab=t; render(); window.scrollTo(0,0); };
 window.chMonth=d=>{ UI.month=mAdd(UI.month,d); render(); };
 window.goReview=k=>{ UI.month=k; go('review'); };
-window.setWho=w=>{ UI.who=w; render(); window.scrollTo(0,0); };
 const monthSel=()=>`<div class="msel"><button class="mbtn" onclick="chMonth(-1)">‹</button><div class="mlab">${esc(mLabel(UI.month))}</div><button class="mbtn" onclick="chMonth(1)">›</button></div>`;
-/* pengalih orang — hanya satu orang yang datanya tampil pada satu waktu */
-const personSel=()=>`<div class="seg persw">
-  ${['a','b'].map(w=>`<button class="${UI.who===w?'on p'+w:''}" onclick="setWho('${w}')">${esc(nameOf(w))}${authUser()===w?' · Saya':(anyPin()?' 👁️':'')}</button>`).join('')}
-</div>`;
-const viewedLabel=()=>UI.who===L.me?'Keuanganmu':'Keuangan '+nameOf(UI.who);
 
 /* =====================================================================
    RENDER
    ===================================================================== */
 function render(){
   $$('nav button[data-tab]').forEach(b=>b.classList.toggle('on', b.dataset.tab===UI.tab));
-  document.querySelector('.fab').style.visibility = viewOnly() ? 'hidden' : 'visible';
   const v=$('#view');
   if(UI.tab==='home') v.innerHTML=vHome();
   else if(UI.tab==='hist') v.innerHTML=vHist();
@@ -501,35 +497,33 @@ function render(){
 
 /* ---------- Beranda ---------- */
 function vHome(){
-  const k=UI.month, w=UI.who, s=sums(k,w), mine=w===L.me;
+  const k=UI.month, s=sums(k);
   let h='';
   // pengingat review bulan lalu
   const prev=mAdd(mkeyNow(),-1);
-  if(txMonth(prev,w).length && !(S.reviews[prev]&&S.reviews[prev].done)){
+  if(txMonth(prev).length && !(S.reviews[prev]&&S.reviews[prev].done)){
     h+=`<div class="banner"><span style="font-size:22px">📅</span>
       <div class="bt"><b>Waktunya review bulanan!</b><br><span class="mut small">Keuangan ${esc(mLabel(prev))} belum direview.</span></div>
       <button class="btn sm" onclick="goReview('${prev}')">Mulai</button></div>`;
   }
-  h+=personSel()+roBanner();
-  if(mine) h+=`<div class="small mut" style="margin:2px 2px 8px">Halo, <b>${esc(nameOf(w))}</b> 👋</div>`;
-  else if(!viewOnly()) h+=`<div class="small mut" style="margin:2px 2px 8px">Kamu sedang melihat catatan <b>${esc(nameOf(w))}</b></div>`;
+  h+=`<div class="small mut" style="margin:2px 2px 8px">Halo, <b>${esc(myName())}</b> 👋</div>`;
   h+=monthSel();
   h+=`<div class="sumgrid">
     <div class="sum in"><div class="t">Pemasukan</div><div class="v">${rp(s.inn)}</div></div>
     <div class="sum out"><div class="t">Pengeluaran</div><div class="v">${rp(s.out)}</div></div>
     <div class="sum net ${s.net<0?'minus':''}"><div><div class="t">Sisa bulan ini</div><div class="v">${rpS(s.net)}</div></div><div style="font-size:30px">${s.net<0?'😰':'💰'}</div></div>
   </div>
-  ${viewOnly()?'':`<div class="quick">
+  <div class="quick">
     <button onclick="openTx()"><span class="i">➕</span>Catat cepat</button>
     <button onclick="openScan()"><span class="i">📷</span>Scan struk</button>
-  </div>`}`;
+  </div>`;
   // batas total pengeluaran bulan ini
-  const tl=totalLimit(w);
+  const tl=totalLimit();
   if(tl>0){
     const pct=Math.round(s.out/tl*100), left=tl-s.out, dl=daysLeft(k);
     const cls=s.out>tl?'over':(s.out>tl*.8?'warn':'');
     h+=`<div class="card" style="margin-top:12px"><h2>🎯 Batas Pengeluaran Bulan Ini
-      ${viewOnly()?'':`<button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">Atur</button>`}</h2>
+      <button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">Atur</button></h2>
       <div class="top" style="display:flex;justify-content:space-between;font-size:13.5px"><span>Terpakai <b>${rp(s.out)}</b> dari ${rp(tl)}</span><b class="${cls==='over'?'':''}" style="color:${s.out>tl?'var(--out)':'var(--ink)'}">${pct}%</b></div>
       <div class="bar" style="margin-top:6px"><i class="${cls}" style="width:${Math.min(100,pct)}%"></i></div>
       ${left>=0
@@ -539,27 +533,27 @@ function vHome(){
   }
   // pengeluaran per kategori + batasnya
   const rows=S.categories.filter(c=>c.type==='out').map(c=>({c, spent:s.byCatOut[c.id]||0}))
-    .filter(x=>x.spent>0 || budgetOf(x.c,w)>0).sort((x,y)=>y.spent-x.spent);
+    .filter(x=>x.spent>0 || budgetOf(x.c)>0).sort((x,y)=>y.spent-x.spent);
   const orphan=Object.keys(s.byCatOut).filter(id=>!S.categories.some(c=>c.id===id));
   for(const id of orphan) rows.push({c:cat(id), spent:s.byCatOut[id]});
   h+=`<div class="card" style="margin-top:12px"><h2>📊 Pengeluaran per Kategori
-    ${viewOnly()?'':`<button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">🎯 Batas</button>`}</h2>`;
+    <button class="btn ghost sm" style="margin-left:auto" onclick="openLimits()">🎯 Batas</button></h2>`;
   if(!rows.length) h+=`<div class="empty"><div class="e">🌱</div>Belum ada pengeluaran bulan ini.<br><span class="tiny">Atur batas pengeluaranmu lewat tombol <b>🎯 Batas</b> di atas.</span></div>`;
   else{
-    const mx=Math.max(...rows.map(x=>Math.max(x.spent, monthLimit(x.c,w,k))),1);
+    const mx=Math.max(...rows.map(x=>Math.max(x.spent, monthLimit(x.c,k))),1);
     for(const {c,spent} of rows){
-      const b=monthLimit(c,w,k), pct=b>0?spent/b:spent/mx;
+      const b=monthLimit(c,k), pct=b>0?spent/b:spent/mx;
       const cls=b>0?(spent>b?'over':(spent>b*.8?'warn':'')):'';
-      const per=periodOf(c,w);
+      const per=periodOf(c);
       h+=`<div class="crow"><div class="top"><span>${c.icon} ${esc(c.name)}</span><b>${rp(spent)}${b>0?`<span class="mut tiny"> / ${rp(b)}</span>`:''}</b></div>
       <div class="bar"><i class="${cls}" style="width:${Math.min(100,Math.round(pct*100))}%"></i></div>
-      ${b>0&&per!=='month'?`<div class="tiny mut" style="margin-top:3px">batas ${limitLabel(c,w)} · setara ${rp(b)} sebulan</div>`:''}
+      ${b>0&&per!=='month'?`<div class="tiny mut" style="margin-top:3px">batas ${limitLabel(c)} · setara ${rp(b)} sebulan</div>`:''}
       ${b>0&&spent>b?`<div class="tiny" style="color:var(--out);font-weight:700;margin-top:3px">Melebihi batas ${rp(spent-b)} ⚠️</div>`:''}</div>`;
     }
   }
   h+=`</div>`;
   // transaksi terakhir
-  const recent=txMonth(k,w).slice().sort((a,b)=>b.date.localeCompare(a.date)||((b.at||0)-(a.at||0))).slice(0,5);
+  const recent=txMonth(k).slice().sort((a,b)=>b.date.localeCompare(a.date)||((b.at||0)-(a.at||0))).slice(0,5);
   h+=`<div class="card"><h2>🕐 Transaksi Terakhir <button class="btn ghost sm" style="margin-left:auto" onclick="go('hist')">Lihat semua</button></h2>`;
   if(!recent.length){
     h+=`<div class="empty"><div class="e">📝</div>Belum ada catatan di ${esc(mLabel(k))}.<br>
@@ -584,8 +578,8 @@ function txRow(t){
 window.setF=(key,val)=>{ UI.f[key]=val; render(); };
 window.setQ=el=>{ UI.f.q=el.value; drawHistList(); };
 function vHist(){
-  const s=sums(UI.month,UI.who);
-  let h=personSel()+roBanner()+monthSel();
+  const s=sums(UI.month);
+  let h=monthSel();
   h+=`<div class="chips">
     <button class="chip ${UI.f.type==='all'?'on':''}" onclick="setF('type','all')">Semua</button>
     <button class="chip ${UI.f.type==='in'?'on':''}" onclick="setF('type', UI.f.type==='in'?'all':'in')">⬇️ Masuk</button>
@@ -600,7 +594,7 @@ function vHist(){
 function drawHistList(){
   const el=$('#histList'); if(!el) return;
   const q=UI.f.q.trim().toLowerCase();
-  let list=txMonth(UI.month,UI.who).filter(t=>
+  let list=txMonth(UI.month).filter(t=>
     (UI.f.type==='all'||t.type===UI.f.type) &&
     (!q || (t.note||'').toLowerCase().includes(q) || cat(t.catId).name.toLowerCase().includes(q))
   ).sort((a,b)=>b.date.localeCompare(a.date)||((b.at||0)-(a.at||0)));
@@ -678,31 +672,31 @@ const chartLegend=()=>`<div class="legend">
   <span><i class="sw hatch"></i>Pengeluaran</span></div>`;
 
 function vReview(){
-  const k=UI.month, w=UI.who, s=sums(k,w), sp=sums(mAdd(k,-1),w), mine=w===L.me;
+  const k=UI.month, s=sums(k), sp=sums(mAdd(k,-1));
   const rv=S.reviews[k]||{};
   let h=`<div class="printonly">
     <div class="pt">Review Keuangan Bulanan</div>
-    <div class="ps">${esc(nameOf(w))} · ${esc(mLabel(k))} · dicetak ${new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}</div>
+    <div class="ps">${esc(myName())} · ${esc(mLabel(k))} · dicetak ${new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'})}</div>
   </div>`;
-  h+=`<div class="small mut noprint" style="margin:2px 2px 8px">📋 Review bulanan ${esc(nameOf(w))} — lihat rapor masing-masing, lalu tulis kesepakatan bersama di bawah.</div>`;
-  h+=personSel()+roBanner()+monthSel();
+  h+=`<div class="small mut noprint" style="margin:2px 2px 8px">📋 Review bulanan ${esc(mLabel(k))} — lihat rapornya, lalu tulis kesimpulanmu di bawah.</div>`;
+  h+=monthSel();
   // riwayat 6 bulan
   h+=`<div class="mhist noprint" style="margin-bottom:12px">`+
     [...Array(6)].map((_,i)=>{const mk=mAdd(mkeyNow(),-(5-i)); const done=S.reviews[mk]&&S.reviews[mk].done;
       return `<button class="${done?'done':''} ${mk===k?'cur':''}" onclick="goReview('${mk}')">${done?'✅ ':''}${esc(mShort(mk))}</button>`;}).join('')+`</div>`;
   if(!s.count){
-    h+=`<div class="card"><div class="empty"><div class="e">🗓️</div>${esc(nameOf(w))} belum punya transaksi di ${esc(mLabel(k))},<br>jadi belum ada yang bisa direview.</div></div>`;
+    h+=`<div class="card"><div class="empty"><div class="e">🗓️</div>Belum ada transaksi di ${esc(mLabel(k))},<br>jadi belum ada yang bisa direview.</div></div>`;
     return h;
   }
   // vonis kesehatan keuangan
   const rate=s.inn>0?Math.round(s.net/s.inn*100):null;
-  const you=mine?'Kamu':esc(nameOf(w));
+  const you='Kamu';
   let cls='ok', icon='🙂', txt;
   if(s.net<0){ cls='bad'; icon='🚨'; txt=`Defisit ${rp(s.net)} — pengeluaran melebihi pemasukan.`; }
   else if(rate!==null&&rate>=20){ cls='good'; icon='🌟'; txt=`Hebat! ${you} menyisakan ${rate}% dari pemasukan (${rp(s.net)}).`; }
   else txt=`Sisa ${rpS(s.net)}${rate!==null?` (${rate}% dari pemasukan)`:''} — masih bisa ditingkatkan.`;
   h+=`<div class="verdict ${cls}"><div style="font-size:26px">${icon}</div><div class="big">${txt}</div>
-    <div class="small" style="opacity:.9;margin-top:4px">${s.count} transaksi ${esc(nameOf(w))} di ${esc(mLabel(k))}</div></div>`;
+    <div class="small" style="opacity:.9;margin-top:4px">${s.count} transaksi di ${esc(mLabel(k))}</div></div>`;
   // angka utama + perbandingan bulan lalu
   h+=`<div class="stat2">
     <div class="stat"><div class="t">PEMASUKAN</div><div class="v" style="color:var(--in)">${rp(s.inn)}</div>${deltaBadge(pctDelta(s.inn,sp.inn),false)}</div>
@@ -712,70 +706,65 @@ function vReview(){
   </div>`;
   // grafik pemasukan vs pengeluaran + rincian 6 bulan
   const mks=[...Array(6)].map((_,i)=>mAdd(k,-(5-i)));
-  const msums=mks.map(m=>({m, s:sums(m,w)}));
+  const msums=mks.map(m=>({m, s:sums(m)}));
   if(msums.some(x=>x.s.count)){
     h+=`<div class="card"><h2>📊 Pemasukan vs Pengeluaran</h2>
       <div class="small mut" style="margin:-4px 0 6px">${esc(mLabel(k))} · masuk <b style="color:var(--in)">${rp(s.inn)}</b> · keluar <b style="color:var(--out)">${rp(s.out)}</b></div>
       ${chartIO(msums,k)}${chartLegend()}
-      <div class="tiny mut" style="margin-top:6px">Enam bulan terakhir milik ${esc(nameOf(w))}; bulan yang sedang direview disorot.</div></div>`;
+      <div class="tiny mut" style="margin-top:6px">Enam bulan terakhir; bulan yang sedang direview disorot.</div></div>`;
     const maxOut=Math.max(...msums.map(x=>x.s.out), 1);
-    h+=`<div class="card"><h2>📈 Rincian 6 Bulan ${esc(nameOf(w))}</h2>
+    h+=`<div class="card"><h2>📈 Rincian 6 Bulan</h2>
       <div class="tiny mut" style="margin-bottom:8px">Pengeluaran tiap bulan, dibanding bulan tertinggi.</div>`;
     for(const {m, s:s2} of msums){
       if(!s2.count){ h+=`<div class="crow"><div class="top"><span class="mut">${esc(mShort(m))}</span><span class="tiny mut">belum ada catatan</span></div></div>`; continue; }
       h+=`<div class="crow"><div class="top"><span><b>${esc(mShort(m))}</b>${m===k?' <span class="tiny" style="color:var(--pri)">◀ bulan ini</span>':''}</span>
         <b style="color:${s2.net<0?'var(--out)':'var(--in)'}">${s2.net<0?'−':'+'}${rp(s2.net)}</b></div>
-        <div class="bar" style="margin-top:6px"><i style="width:${Math.round(s2.out/maxOut*100)}%;background:var(--${w})"></i></div>
+        <div class="bar" style="margin-top:6px"><i style="width:${Math.round(s2.out/maxOut*100)}%;background:var(--pri)"></i></div>
         <div class="tiny mut" style="margin-top:3px">keluar ${rp(s2.out)} · masuk ${rp(s2.inn)}</div></div>`;
     }
     h+=`</div>`;
   }
   // batas vs realisasi
-  const tlim=totalLimit(w);
-  const brows=S.categories.filter(c=>c.type==='out'&&(budgetOf(c,w)>0||(s.byCatOut[c.id]||0)>0))
+  const tlim=totalLimit();
+  const brows=S.categories.filter(c=>c.type==='out'&&(budgetOf(c)>0||(s.byCatOut[c.id]||0)>0))
     .map(c=>({c,spent:s.byCatOut[c.id]||0})).sort((x,y)=>y.spent-x.spent);
   if(tlim>0||brows.length){
     h+=`<div class="card"><h2>🎯 Batas vs Realisasi
-      ${viewOnly()?'':`<button class="btn ghost sm noprint" style="margin-left:auto" onclick="openLimits()">Atur</button>`}</h2>`;
+      <button class="btn ghost sm noprint" style="margin-left:auto" onclick="openLimits()">Atur</button></h2>`;
     if(tlim>0){
       h+=`<div class="crow"><div class="top"><span>${s.out<=tlim?'✅':'❌'} <b>Batas total bulanan</b></span>
         <b>${rp(s.out)}<span class="mut tiny"> / ${rp(tlim)}</span></b></div>
         <div class="bar"><i class="${s.out>tlim?'over':(s.out>tlim*.8?'warn':'')}" style="width:${Math.min(100,Math.round(s.out/tlim*100))}%"></i></div></div>`;
     }
     for(const {c,spent} of brows){
-      const b=monthLimit(c,w,k), per=periodOf(c,w);
+      const b=monthLimit(c,k), per=periodOf(c);
       const st=b>0?(spent<=b?'✅':'❌'):'·';
       h+=`<div class="crow"><div class="top"><span>${st} ${c.icon} ${esc(c.name)}</span>
         <b>${rp(spent)}${b>0?`<span class="mut tiny"> / ${rp(b)}</span>`:''}</b></div>
         ${b>0?`<div class="bar"><i class="${spent>b?'over':(spent>b*.8?'warn':'')}" style="width:${Math.min(100,Math.round(spent/b*100))}%"></i></div>`:''}
-        ${b>0&&per!=='month'?`<div class="tiny mut" style="margin-top:3px">batas ${limitLabel(c,w)}</div>`:''}</div>`;
+        ${b>0&&per!=='month'?`<div class="tiny mut" style="margin-top:3px">batas ${limitLabel(c)}</div>`:''}</div>`;
     }
-    h+=`<div class="tiny mut" style="margin-top:8px">Batas ini milik ${esc(nameOf(w))} sendiri.</div></div>`;
+    h+=`</div>`;
   }
   // 5 pengeluaran terbesar
-  const top=txMonth(k,w).filter(t=>t.type==='out').sort((a,b)=>(b.amount||0)-(a.amount||0)).slice(0,5);
+  const top=txMonth(k).filter(t=>t.type==='out').sort((a,b)=>(b.amount||0)-(a.amount||0)).slice(0,5);
   if(top.length){
     h+=`<div class="card"><h2>🔥 5 Pengeluaran Terbesar</h2>${top.map(txRow).join('')}</div>`;
   }
   // catatan review + tandai selesai
-  if(viewOnly()){
-    h+=`<div class="card"><h2>✍️ Catatan & Kesepakatan Review</h2>
-      ${rv.note?`<div class="noteprint" style="display:block">${esc(rv.note)}</div>`:'<div class="small mut">(belum ada catatan)</div>'}
-      <div class="tiny mut" style="margin-top:8px">Catatan ini bisa kamu tulis dari tampilan catatanmu sendiri.</div></div>`;
-  }
   h+=`<div class="card noprint"><h2>📄 Simpan Review sebagai PDF</h2>
-    <p class="small mut" style="margin:0 0 10px">Menyusun laporan rapi berisi grafik, angka, batas, dan catatan kesepakatan
-      untuk ${esc(nameOf(w))} bulan ${esc(mLabel(k))}. Pada dialog cetak yang muncul, pilih tujuan
+    <p class="small mut" style="margin:0 0 10px">Menyusun laporan rapi berisi grafik, angka, batas, dan catatan
+      untuk bulan ${esc(mLabel(k))}. Pada dialog cetak yang muncul, pilih tujuan
       <b>“Simpan sebagai PDF”</b> (Android: <i>Save as PDF</i>, iPhone: cubit-perbesar lalu Bagikan).</p>
     <button class="btn" onclick="printReview()">📄 Buat PDF Review</button></div>`;
-  if(!viewOnly()) h+=`<div class="card"><h2>✍️ Catatan & Kesepakatan Review</h2>
-    ${rv.done?`<div class="donebadge">✅ Review ${esc(mLabel(k))} selesai — ditandai oleh ${esc(nameOf(rv.by||'a'))}${rv.doneAt?', '+new Date(rv.doneAt).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):''}</div>`:''}
-    <textarea class="noprint" id="revNote" rows="4" placeholder="Tulis hasil diskusi kalian… contoh: 'Bulan depan jatah ngopi dikurangi separuh', 'Naikkan setoran tabungan bulanan'." oninput="revNote('${k}',this)">${esc(rv.note||'')}</textarea>
+  h+=`<div class="card"><h2>✍️ Catatan Review</h2>
+    ${rv.done?`<div class="donebadge">✅ Review ${esc(mLabel(k))} selesai${rv.doneAt?' — '+new Date(rv.doneAt).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'}):''}</div>`:''}
+    <textarea class="noprint" id="revNote" rows="4" placeholder="Tulis kesimpulanmu… contoh: 'Bulan depan jatah ngopi dikurangi separuh', 'Naikkan setoran tabungan bulanan'." oninput="revNote('${k}',this)">${esc(rv.note||'')}</textarea>
     <div class="printonly noteprint">${rv.note?esc(rv.note):'(belum ada catatan)'}</div>
     <div class="noprint" style="margin-top:10px">${rv.done
       ?`<button class="btn ghost" onclick="revDone('${k}',true)">↩️ Buka lagi review ini</button>`
-      :`<button class="btn green" onclick="revDone('${k}',false)">✅ Tandai Review Selesai (oleh ${esc(nameOf(L.me))})</button>`}</div>
-    <div class="tiny mut noprint" style="margin-top:8px">Catatan ini ikut tersinkron, jadi pengguna satunya bisa membacanya di HP-nya.</div></div>`;
+      :`<button class="btn green" onclick="revDone('${k}',false)">✅ Tandai Review Selesai</button>`}</div>
+    <div class="tiny mut noprint" style="margin-top:8px">Catatan ini ikut tersinkron ke perangkat lainmu.</div></div>`;
   return h;
 }
 window.printReview=()=>{
@@ -789,10 +778,9 @@ window.revNote=(k,el)=>{
   _rnT=setTimeout(()=>{ const r=S.reviews[k]||(S.reviews[k]={}); r.note=el.value; r.at=Date.now(); save(); queueSync('reviews'); },500);
 };
 window.revDone=(k,reopen)=>{
-  if(!needEdit(UI.who)) return;
   const r=S.reviews[k]||(S.reviews[k]={});
   const note=$('#revNote'); if(note){ r.note=note.value; }
-  r.done=!reopen; r.by=authUser()||L.me; r.at=Date.now(); r.doneAt=r.done?Date.now():null;
+  r.done=!reopen; r.at=Date.now(); r.doneAt=r.done?Date.now():null;
   save(); queueSync('reviews'); render();
   toast(r.done?'🎉 Review '+mLabel(k)+' selesai!':'Review dibuka kembali.');
 };
@@ -802,53 +790,34 @@ function vSet(){
   const sy=S.settings.sync||{};
   const catRows=t=>S.categories.filter(c=>c.type===t).map(c=>`
     <div class="srow"><span style="font-size:19px">${c.icon}</span>
-      <div class="n">${esc(c.name)}${t==='out'?`<div class="b">Batas ${esc(nameOf(UI.who))}: ${budgetOf(c,UI.who)>0?limitLabel(c,UI.who):'belum diatur'}</div>`:''}</div>
+      <div class="n">${esc(c.name)}${t==='out'?`<div class="b">Batas: ${budgetOf(c)>0?limitLabel(c):'belum diatur'}</div>`:''}</div>
       <button class="iconbtn" onclick="openCat('${esc(c.id)}')">✏️</button></div>`).join('');
-  const tl=totalLimit(UI.who), hasPin=!!pinOf(UI.who);
-  if(viewOnly()) return roBanner()+`
-    <div class="card"><h2>👁️ Pengaturan Terbatas</h2>
-      <p class="small mut" style="margin:0 0 10px">Kamu masuk sebagai <b>${esc(nameOf(authUser()))}</b> dan sedang melihat
-        catatan <b>${esc(nameOf(UI.who))}</b>. Kunci, batas pengeluaran, dan kategori hanya bisa diatur oleh pemiliknya sendiri.</p>
-      <button class="btn" onclick="setWho('${authUser()}')">← Kembali ke catatanku</button>
-      <button class="btn ghost" style="margin-top:8px" onclick="switchUser()">🔁 Ganti pengguna</button>
-    </div>`;
+  const tl=totalLimit(), hasPin=anyPin();
   return `
-  <div class="card"><h2>🔒 Kunci Pribadi</h2>
-    <p class="small mut" style="margin:0 0 10px">Catatan <b>${esc(nameOf(UI.who))}</b> hanya bisa dibuka dengan PIN miliknya.
-      Setelah masuk, kamu hanya bisa mengubah catatanmu sendiri — catatan orang satunya tetap bisa dilihat, tetapi tidak bisa diedit.</p>
+  <div class="card"><h2>🔒 Kunci Aplikasi</h2>
+    <p class="small mut" style="margin:0 0 10px">Pasang PIN supaya catatanmu tidak bisa dibuka orang lain
+      saat HP dipinjam atau tertinggal.</p>
     <div class="srow"><span style="font-size:19px">${hasPin?'🔐':'🔓'}</span>
       <div class="n">Status<div class="b">${hasPin?'Terkunci dengan PIN':'Belum dikunci — siapa pun bisa membuka'}</div></div></div>
     ${hasPin?`<div class="srow"><span style="font-size:19px">⏱️</span>
       <div class="n">Kunci otomatis<div class="b">${S.settings.autolock!==false?'Aktif — setelah 5 menit menganggur':'Nonaktif'}</div></div>
       <button class="btn ghost sm" onclick="toggleAutolock()">${S.settings.autolock!==false?'Matikan':'Aktifkan'}</button></div>`:''}
-    <button class="btn" style="margin-top:12px" onclick="openPin()">${hasPin?'🔑 Ganti / Hapus PIN':'🔒 Pasang PIN untuk '+esc(nameOf(UI.who))}</button>
-    ${anyPin()?`<button class="btn ghost" style="margin-top:8px" onclick="lockNow()">🔒 Kunci sekarang</button>
-    <button class="btn ghost" style="margin-top:8px" onclick="switchUser()">🔁 Ganti pengguna</button>
-    <div class="tiny mut" style="margin-top:10px">Satu sesi hanya untuk satu orang: setelah masuk dengan PIN, catatan orang satunya bisa dilihat tetapi tidak bisa diubah.</div>`:''}
+    <button class="btn" style="margin-top:12px" onclick="openPin()">${hasPin?'🔑 Ganti / Hapus PIN':'🔒 Pasang PIN'}</button>
+    ${hasPin?`<button class="btn ghost" style="margin-top:8px" onclick="lockNow()">🔒 Kunci sekarang</button>`:''}
   </div>`+`
-  <div class="card"><h2>👥 Profil Pengguna</h2>
-    <div class="grid2">
-      <div class="field"><label>Nama orang ke-1</label><input id="setNameA" value="${esc(S.settings.nameA)}" onchange="saveNames()"></div>
-      <div class="field"><label>Nama orang ke-2</label><input id="setNameB" value="${esc(S.settings.nameB)}" onchange="saveNames()"></div>
-    </div>
-    <div class="field"><label>HP ini dipakai oleh</label>
-      <div class="seg">
-        <button class="${L.me==='a'?'on':''}" onclick="setMe('a')">${esc(nameOf('a'))}</button>
-        <button class="${L.me==='b'?'on':''}" onclick="setMe('b')">${esc(nameOf('b'))}</button>
-      </div>
-      <div class="tiny mut" style="margin-top:6px">Pilihan ini hanya untuk HP ini — di HP satunya pilih nama yang lain.</div>
-    </div>
+  <div class="card"><h2>👤 Profil</h2>
+    <div class="field"><label>Namamu</label><input id="setName" value="${esc(myName())}" onchange="saveNames()"></div>
     <div class="field"><label>Mata uang</label>
       <div class="seg">
         <button class="${S.settings.currency!=='IDR'?'on':''}" onclick="setCur('GBP')">£ Poundsterling</button>
         <button class="${S.settings.currency==='IDR'?'on':''}" onclick="setCur('IDR')">Rp Rupiah</button>
       </div>
-      <div class="tiny mut" style="margin-top:6px">Berlaku untuk kedua pengguna (ikut tersinkron). Nominal yang sudah tercatat tidak dikonversi otomatis.</div>
+      <div class="tiny mut" style="margin-top:6px">Nominal yang sudah tercatat tidak dikonversi otomatis.</div>
     </div>
   </div>
 
   <div class="card"><h2>🎯 Batas Pengeluaran</h2>
-    <p class="small mut" style="margin:0 0 10px">Atur batas total bulanan dan batas tiap kategori milik <b>${esc(nameOf(UI.who))}</b> dalam satu layar.
+    <p class="small mut" style="margin:0 0 10px">Atur batas total bulanan dan batas tiap kategori dalam satu layar.
       Batas bisa dipatok <b>per hari, per minggu, atau per bulan</b>, dan kamu diingatkan begitu terlampaui.</p>
     <div class="srow"><span style="font-size:19px">💷</span>
       <div class="n">Batas total per bulan<div class="b">${tl>0?rp(tl):'belum diatur'}</div></div></div>
@@ -856,25 +825,25 @@ function vSet(){
   </div>
 
   <div class="card"><h2>🏷️ Kategori</h2>
-    <div class="small mut" style="margin-bottom:8px">Batas yang ditampilkan milik <b>${esc(nameOf(UI.who))}</b>. Ganti orangnya di Beranda untuk mengatur milik satunya.</div>
     <div class="small mut" style="margin-bottom:6px">Pengeluaran</div>${catRows('out')}
     <div class="small mut" style="margin:12px 0 6px">Pemasukan</div>${catRows('in')}
     <div style="margin-top:12px"><button class="btn ghost" onclick="openCat()">➕ Tambah kategori</button></div>
   </div>
 
-  <div class="card"><h2>☁️ Sinkronisasi 2 HP</h2>
-    <p class="small mut" style="margin:0 0 10px">Hubungkan kedua HP supaya setiap catatan langsung muncul di HP satunya (real-time).
+  <div class="card"><h2>☁️ Sinkronisasi Antar Perangkat</h2>
+    <p class="small mut" style="margin:0 0 10px">Punya HP kedua, tablet, atau ganti HP? Hubungkan supaya catatanmu sama di semua perangkat (real-time).
+      Kalau hanya memakai satu HP, bagian ini boleh dilewati.
     Butuh akun <b>Firebase gratis</b> — ikuti <b>PANDUAN_KEUANGAN.md</b> di repo (±5 menit, sekali saja).</p>
     <div class="field"><label><input type="checkbox" id="syOn" style="width:auto" ${sy.enabled?'checked':''}> &nbsp;Aktifkan sinkronisasi cloud</label></div>
     <div class="field"><label>Firebase API Key</label><input id="syApi" value="${esc(sy.apiKey||'')}" placeholder="AIza…" autocomplete="off"></div>
     <div class="field"><label>Firebase Project ID</label><input id="syProj" value="${esc(sy.projectId||'')}" placeholder="cth: keuangan-kita"></div>
-    <div class="field"><label>Kode Sinkronisasi (harus sama persis di kedua HP)</label>
+    <div class="field"><label>Kode Sinkronisasi (harus sama persis di semua perangkatmu)</label>
       <div style="display:flex;gap:8px">
         <input id="syCid" value="${esc(sy.coupleId||'')}" placeholder="klik 🎲 untuk membuat" autocomplete="off">
         <button class="iconbtn" style="flex:none" title="Buat ID acak" onclick="$('#syCid').value='kb-'+rid(18)">🎲</button>
         <button class="iconbtn" style="flex:none" title="Salin" onclick="copyCid()">📋</button>
       </div>
-      <div class="tiny mut" style="margin-top:6px">Kode ini seperti kunci brankas — jangan bagikan ke siapa pun di luar kedua HP ini.</div>
+      <div class="tiny mut" style="margin-top:6px">Kode ini seperti kunci brankas — jangan bagikan ke siapa pun.</div>
     </div>
     <button class="btn" onclick="syncSave()">💾 Simpan & Sambungkan</button>
     <div id="syStatus" class="small mut" style="margin-top:8px">${SYNC.on?'☁️ Tersinkron':'☁️ Belum tersambung (data hanya di HP ini)'}</div>
@@ -891,12 +860,11 @@ function vSet(){
     <button class="btn danger" onclick="wipeAll()">🗑️ Hapus SEMUA data</button>
   </div>
 
-  <div class="card"><h2>📲 Cara Pakai di 2 HP</h2>
+  <div class="card"><h2>📲 Pasang di Layar Utama</h2>
     <ol class="small" style="margin:0 0 10px; padding-left:20px; color:var(--ink)">
       <li style="margin-bottom:6px"><b>Pasang di HP ini</b> — Android (Chrome): menu ⋮ → <i>Tambahkan ke layar utama</i> / <i>Instal aplikasi</i>. iPhone (Safari): tombol Bagikan ⬆️ → <i>Tambah ke Layar Utama</i>.</li>
-      <li style="margin-bottom:6px"><b>Kirim link aplikasi ke HP kedua</b> (tombol di bawah), lalu pasang dengan cara yang sama.</li>
-      <li style="margin-bottom:6px"><b>Di HP kedua</b>: isi kedua nama yang sama, lalu pilih "HP ini dipakai oleh" = pemilik HP itu.</li>
-      <li><b>Sambungkan keduanya</b> lewat kartu <b>☁️ Sinkronisasi 2 HP</b> di atas — isi API Key, Project ID, dan <b>Kode Sinkronisasi yang sama persis</b> di kedua HP. Setelah itu semua catatan &amp; progress kalian tampil di dua-duanya secara real-time.</li>
+      <li style="margin-bottom:6px">Aplikasi lalu terbuka layar penuh dan tetap jalan tanpa internet.</li>
+      <li><b>Punya perangkat lain?</b> Kirim linknya (tombol di bawah), pasang dengan cara yang sama, lalu isi <b>Kode Sinkronisasi yang sama persis</b> lewat kartu di atas.</li>
     </ol>
     <div class="grid2">
       <button class="btn ghost" onclick="shareApp()">📤 Bagikan link</button>
@@ -905,39 +873,34 @@ function vSet(){
   </div>`;
 }
 window.saveNames=()=>{
-  S.settings.nameA=$('#setNameA').value.trim()||'Orang 1';
-  S.settings.nameB=$('#setNameB').value.trim()||'Orang 2';
+  S.settings.name=$('#setName').value.trim()||'Saya';
   save(); queueSync('settings'); render();
 };
-window.setMe=w=>{ L.me=w; UI.who=w; saveL(); render(); toast('HP ini sekarang milik '+nameOf(w)); };
 window.setCur=c=>{ S.settings.currency=c; save(); queueSync('settings'); render(); toast('Mata uang: '+(c==='IDR'?'Rupiah (Rp)':'Poundsterling (£)')); };
 window.toggleAutolock=()=>{ S.settings.autolock=S.settings.autolock===false; save(); queueSync('settings'); render(); };
 const appUrl=()=>location.href.split('#')[0].split('?')[0];
 window.shareApp=async()=>{
-  if(location.protocol==='file:') return toast('Aplikasi belum di-hosting — kirim file index.html ke HP kedua.');
+  if(location.protocol==='file:') return toast('Aplikasi belum di-hosting — kirim file index.html ke perangkat lain.');
   if(navigator.share){ try{ await navigator.share({title:'Catatan Keuangan', text:'Pasang aplikasi catatan keuangan di HP-mu:', url:appUrl()}); }catch(e){/* dibatalkan */} }
   else copyAppLink();
 };
 window.copyAppLink=()=>{
   if(location.protocol==='file:') return toast('Aplikasi belum di-hosting — kirim file index.html ke HP kedua.');
   (navigator.clipboard?navigator.clipboard.writeText(appUrl()):Promise.reject())
-    .then(()=>toast('🔗 Link disalin — kirim ke HP kedua.'), ()=>toast(appUrl()));
+    .then(()=>toast('🔗 Link disalin.'), ()=>toast(appUrl()));
 };
 window.copyCid=()=>{
   const v=$('#syCid').value.trim(); if(!v) return toast('Belum ada kode.');
-  (navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>toast('📋 Kode disalin — kirim ke HP kedua.'),()=>toast('Salin manual: '+v));
+  (navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(()=>toast('📋 Kode disalin.'),()=>toast('Salin manual: '+v));
 };
 
 /* ---------- modal transaksi ---------- */
 const MT={};
 window.openTx=id=>{
   const t=id?S.tx.find(x=>x.id===id):null;
-  if(t&&!canEdit(whoOf(t))) return viewTx(t);
-  if(!t&&!needEdit(UI.who)) return;
   MT.id=t?t.id:null;
   MT.type=t?t.type:'out';
   MT.catId=t?t.catId:'';
-  MT.who=t?whoOf(t):UI.who;
   MT.date=t?t.date:todayStr();
   MT.amount=t?t.amount:'';
   MT.note=t?(t.note||''):'';
@@ -961,7 +924,6 @@ function drawTxModal(){
     value="${amtStr(MT.amount)}" oninput="fmtAmt(this)"></div>
   <div class="field"><label>Kategori</label><div class="catgrid" id="mtCats"></div></div>
   <div class="field"><label>Tanggal</label><input type="date" id="mtDate" value="${esc(MT.date)}"></div>
-  <div class="owner ${MT.who}">Masuk ke catatan <b>${esc(nameOf(MT.who))}</b>${MT.who===L.me?' (kamu)':''}</div>
   <div class="field"><label>Catatan (opsional)</label><input id="mtNote" value="${esc(MT.note)}" placeholder="cth: belanja mingguan, bensin, listrik…"></div>
   <button class="btn" onclick="saveTx()">💾 Simpan</button>
   ${MT.id?`<button class="btn danger" style="margin-top:8px" onclick="delTx('${esc(MT.id)}')">🗑️ Hapus transaksi ini</button>`:''}`;
@@ -995,7 +957,7 @@ window.saveTx=()=>{
   const date=$('#mtDate').value||todayStr();
   const t={
     id:MT.id||L.deviceId.slice(0,4)+'-'+Date.now().toString(36)+rid(4),
-    type:MT.type, amount, catId:MT.catId, who:MT.who, date,
+    type:MT.type, amount, catId:MT.catId, date,
     note:$('#mtNote').value.trim(), at:Date.now(),
   };
   if(MT.items) t.items=MT.items;              // rincian dari struk ikut terbawa saat diubah
@@ -1003,13 +965,13 @@ window.saveTx=()=>{
   if(i>=0) S.tx[i]=t; else S.tx.push(t);
   save(); pushTxCloud(t);
   closeModal();
-  UI.month=date.slice(0,7); UI.who=t.who;
+  UI.month=date.slice(0,7);
   render();
   const warn=limitAlert(t);
   toast(warn || (t.type==='in'?'💰 Pemasukan dicatat!':'💸 Pengeluaran dicatat!'));
 };
 window.delTx=id=>{
-  if(!confirm('Hapus transaksi ini? (terhapus juga di HP satunya)')) return;
+  if(!confirm('Hapus transaksi ini? (terhapus juga di perangkat lain)')) return;
   S.tx=S.tx.filter(x=>x.id!==id);
   save(); deleteTxCloud(id);
   closeModal(); render(); toast('🗑️ Transaksi dihapus.');
@@ -1194,7 +1156,6 @@ function prepImage(file){
 /* --- layar pemindai --- */
 const SCAN={items:[], date:todayStr(), note:''};
 window.openScan=()=>{
-  if(!needEdit(UI.who)) return;
   SCAN.items=[]; SCAN.date=todayStr(); SCAN.note='';
   drawScanStart();
   openModal();
@@ -1206,7 +1167,6 @@ window.openScan=()=>{
 function drawScanStart(){
   $('#modal').innerHTML=`
   <h3>📷 Scan Struk Belanja<button class="x" onclick="closeModal()">✕</button></h3>
-  <div class="owner ${UI.who}">Hasilnya masuk ke catatan <b>${esc(nameOf(UI.who))}</b>${UI.who===L.me?' (kamu)':''}</div>
   <p class="small mut" style="margin:0 0 14px">Foto struknya, nanti aplikasi membaca dan merinci belanjaanmu satu per satu.
     Kamu bisa memperbaiki hasilnya sebelum disimpan.</p>
   <button class="btn big" onclick="$('#scanCam').click()">📷 Ambil / Pilih Foto Struk</button>
@@ -1276,7 +1236,7 @@ function drawScanReview(){
   const groups=[...new Set(SCAN.items.map(x=>x.c))];
   $('#modal').innerHTML=`
   <h3>🧾 Tinjau Belanjaan<button class="x" onclick="closeModal()">✕</button></h3>
-  <div class="owner ${UI.who}">Masuk ke catatan <b>${esc(nameOf(UI.who))}</b> · ${SCAN.items.length} barang terbaca</div>
+  <div class="owner">${SCAN.items.length} barang terbaca dari struk</div>
   <p class="small mut" style="margin:0 0 10px">Periksa sebentar — nama, harga, dan kategorinya bisa kamu betulkan.
     Hasil pembacaan foto kadang meleset satu-dua huruf.</p>
   <div id="scanRows">${rows}</div>
@@ -1298,10 +1258,10 @@ window.scanSave=split=>{
   scanKeepMeta();
   const items=SCAN.items.filter(x=>(Number(x.p)||0)>0 && String(x.n).trim());
   if(!items.length) return toast('Belum ada barang dengan harga.');
-  const date=SCAN.date||todayStr(), who=UI.who, note=SCAN.note.trim();
+  const date=SCAN.date||todayStr(), note=SCAN.note.trim();
   const mk=(list,catId)=>{
     const amount=list.reduce((a,x)=>a+(Number(x.p)||0),0);
-    return {id:L.deviceId.slice(0,4)+'-'+Date.now().toString(36)+rid(4), type:'out', amount, catId, who, date,
+    return {id:L.deviceId.slice(0,4)+'-'+Date.now().toString(36)+rid(4), type:'out', amount, catId, date,
       note:note||('Struk · '+list.length+' barang'), items:list.map(x=>({n:x.n,q:x.q||1,p:Number(x.p)||0})), at:Date.now()};
   };
   const made=[];
@@ -1315,7 +1275,7 @@ window.scanSave=split=>{
   for(const t of made){ S.tx.push(t); pushTxCloud(t); }
   save();
   closeModal();
-  UI.month=date.slice(0,7); UI.who=who;
+  UI.month=date.slice(0,7);
   render();
   const warn=made.map(limitAlert).filter(Boolean)[0];
   toast(warn || `🧾 Tersimpan: ${items.length} barang${made.length>1?' dalam '+made.length+' transaksi':''}.`);
@@ -1323,21 +1283,18 @@ window.scanSave=split=>{
 
 /* ---------- modal batas pengeluaran (semua batas dalam satu layar) ---------- */
 window.openLimits=()=>{
-  const w=UI.who;
-  if(!needEdit(w)) return;
   const cats=S.categories.filter(c=>c.type==='out');
   const perSel=(c)=>`<select id="lp_${esc(c.id)}">${Object.keys(PERIODS).map(p=>
-    `<option value="${p}" ${periodOf(c,w)===p?'selected':''}>${PERIODS[p].lab}</option>`).join('')}</select>`;
+    `<option value="${p}" ${periodOf(c)===p?'selected':''}>${PERIODS[p].lab}</option>`).join('')}</select>`;
   $('#modal').innerHTML=`
   <h3>🎯 Batas Pengeluaran<button class="x" onclick="closeModal()">✕</button></h3>
-  <div class="owner ${w}">Batas milik <b>${esc(nameOf(w))}</b>${w===L.me?' (kamu)':''} — pengguna satunya punya batasnya sendiri.</div>
   <div class="field"><label>Batas total pengeluaran per bulan (kosong = tanpa batas)</label>
     <input id="lTotal" class="amount" style="font-size:20px;padding:11px" inputmode="${cur().dec?'decimal':'numeric'}"
-      value="${amtStr(totalLimit(w))}" placeholder="${cur().sym.trim()} 0" oninput="fmtAmt(this)"></div>
+      value="${amtStr(totalLimit())}" placeholder="${cur().sym.trim()} 0" oninput="fmtAmt(this)"></div>
   <div class="small mut" style="margin:14px 2px 8px"><b>Batas per kategori</b> — pilih satuannya: per hari, per minggu, atau per bulan.</div>
   ${cats.map(c=>`<div class="limrow">
     <div class="ln">${c.icon} ${esc(c.name)}</div>
-    <input id="lb_${esc(c.id)}" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(budgetOf(c,w))}" placeholder="0" oninput="fmtAmt(this)">
+    <input id="lb_${esc(c.id)}" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(budgetOf(c))}" placeholder="0" oninput="fmtAmt(this)">
     ${perSel(c)}
   </div>`).join('')}
   <button class="btn" style="margin-top:14px" onclick="saveLimits()">💾 Simpan Semua Batas</button>
@@ -1345,13 +1302,12 @@ window.openLimits=()=>{
   openModal();
 };
 window.saveLimits=()=>{
-  const w=UI.who;
-  (S.settings.limitTotal=S.settings.limitTotal||{a:0,b:0})[w]=num($('#lTotal').value);
+  S.settings.limitTotal=num($('#lTotal').value);
   for(const c of S.categories.filter(x=>x.type==='out')){
     const amt=$('#lb_'+CSS.escape(c.id)), per=$('#lp_'+CSS.escape(c.id));
     if(!amt) continue;
-    setBudgetOf(c, w, num(amt.value));
-    setPeriodOf(c, w, per?per.value:'month');
+    setBudgetOf(c, num(amt.value));
+    setPeriodOf(c, per?per.value:'month');
   }
   save(); queueSync('categories'); queueSync('settings');
   closeModal(); render(); toast('🎯 Batas pengeluaran disimpan.');
@@ -1359,46 +1315,21 @@ window.saveLimits=()=>{
 /* peringatan begitu sebuah batas terlampaui oleh transaksi yang baru disimpan */
 function limitAlert(t){
   if(t.type!=='out') return '';
-  const k=t.date.slice(0,7), w=whoOf(t), s=sums(k,w), msgs=[];
+  const k=t.date.slice(0,7), s=sums(k), msgs=[];
   const c=S.categories.find(x=>x.id===t.catId);
   if(c){
-    const b=monthLimit(c,w,k), spent=s.byCatOut[c.id]||0;
+    const b=monthLimit(c,k), spent=s.byCatOut[c.id]||0;
     if(b>0&&spent>b) msgs.push(`${c.icon} ${c.name} lewat batas ${rp(spent-b)}`);
     else if(b>0&&spent>b*.8) msgs.push(`${c.icon} ${c.name} sudah ${Math.round(spent/b*100)}% dari batas`);
   }
-  const tl=totalLimit(w);
+  const tl=totalLimit();
   if(tl>0&&s.out>tl) msgs.push(`total bulan ini lewat batas ${rp(s.out-tl)}`);
   return msgs.length?'⚠️ '+msgs.join(' · '):'';
 }
 
-/* tampilan baca-saja untuk transaksi milik orang lain */
-function viewTx(t){
-  const c=cat(t.catId), items=Array.isArray(t.items)?t.items:[];
-  $('#modal').innerHTML=`
-  <h3>👁️ Rincian Transaksi<button class="x" onclick="closeModal()">✕</button></h3>
-  <div class="owner ${whoOf(t)}">Catatan <b>${esc(nameOf(whoOf(t)))}</b> — mode lihat saja, tidak bisa diubah dari sini.</div>
-  <div class="vtx">
-    <div class="vamt ${t.type}">${t.type==='in'?'+':'−'}${rp(t.amount)}</div>
-    <div class="vrow"><span class="mut">Kategori</span><b>${c.icon} ${esc(c.name)}</b></div>
-    <div class="vrow"><span class="mut">Tanggal</span><b>${esc(dLabel(t.date))}</b></div>
-    ${t.note?`<div class="vrow"><span class="mut">Catatan</span><b>${esc(t.note)}</b></div>`:''}
-  </div>
-  ${items.length?`<div class="itemlist" style="margin-top:12px">
-    <div class="ilh">🧾 Rincian belanja (${items.length} barang)</div>
-    ${items.map(x=>`<div class="ili"><span>${x.q>1?esc(x.q)+'× ':''}${esc(x.n)}</span><b>${rp(x.p)}</b></div>`).join('')}
-  </div>`:''}
-  <button class="btn ghost" style="margin-top:12px" onclick="closeModal()">Tutup</button>`;
-  openModal();
-}
-const roBanner=()=>viewOnly()?`<div class="robar">
-  <span class="ri">👁️</span>
-  <div class="rt"><b>Mode lihat saja</b><br><span class="tiny">Kamu masuk sebagai ${esc(nameOf(authUser()))}. Catatan ${esc(nameOf(UI.who))} hanya bisa diubah oleh ${esc(nameOf(UI.who))}.</span></div>
-  <button class="btn sm ghost" onclick="switchUser()">Ganti</button></div>`:'';
-
 /* ---------- modal kategori ---------- */
 const MC={};
 window.openCat=id=>{
-  if(!needEdit(UI.who)) return;
   const c=id?S.categories.find(x=>x.id===id):null;
   MC.id=c?c.id:null; MC.type=c?c.type:'out';
   drawCatModal(c);
@@ -1415,13 +1346,13 @@ function drawCatModal(c){
     <div class="field"><label>Emoji ikon</label><input id="mcIcon" value="${esc(c?c.icon:'🏷️')}" maxlength="4"></div>
     <div class="field"><label>Nama kategori</label><input id="mcName" value="${esc(c?c.name:'')}" placeholder="cth: Kopi & Nongkrong"></div>
   </div>
-  <div class="field" style="${MC.type==='in'?'display:none':''}"><label>Batas pengeluaran ${esc(nameOf(UI.who))} (kosong = tanpa batas)</label>
+  <div class="field" style="${MC.type==='in'?'display:none':''}"><label>Batas pengeluaran (kosong = tanpa batas)</label>
     <div style="display:flex;gap:8px">
-      <input id="mcBud" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(c?budgetOf(c,UI.who):0)}" placeholder="${cur().dec?'cth: 400':'cth: 1.500.000'}" oninput="fmtAmt(this)">
+      <input id="mcBud" inputmode="${cur().dec?'decimal':'numeric'}" value="${amtStr(c?budgetOf(c):0)}" placeholder="${cur().dec?'cth: 400':'cth: 1.500.000'}" oninput="fmtAmt(this)">
       <select id="mcPer" style="width:130px;flex:none">${Object.keys(PERIODS).map(p=>
-        `<option value="${p}" ${(c?periodOf(c,UI.who):'month')===p?'selected':''}>${PERIODS[p].lab}</option>`).join('')}</select>
+        `<option value="${p}" ${(c?periodOf(c):'month')===p?'selected':''}>${PERIODS[p].lab}</option>`).join('')}</select>
     </div>
-    <div class="tiny mut" style="margin-top:5px">Batas dihitung per orang. Untuk mengatur milik ${esc(nameOf(UI.who==='a'?'b':'a'))}, ganti dulu orangnya di Beranda.</div></div>
+  </div>
   <button class="btn" onclick="saveCat()">💾 Simpan</button>
   ${c?`<button class="btn danger" style="margin-top:8px" onclick="delCat('${esc(c.id)}')" ${used?'disabled title="Masih dipakai transaksi"':''}>🗑️ Hapus kategori${used?' (masih dipakai transaksi)':''}</button>`:''}`;
 }
@@ -1437,9 +1368,9 @@ window.saveCat=()=>{
   const budget=MC.type==='out'?num($('#mcBud')?$('#mcBud').value:0):0;
   const per=MC.type==='out'&&$('#mcPer')?$('#mcPer').value:'month';
   let c=MC.id?S.categories.find(x=>x.id===MC.id):null;
-  if(!c){ c={id:'c'+Date.now().toString(36)+rid(3), name, icon, type:MC.type, budget:{a:0,b:0}, period:{a:'month',b:'month'}}; S.categories.push(c); }
+  if(!c){ c={id:'c'+Date.now().toString(36)+rid(3), name, icon, type:MC.type, budget:0, period:'month'}; S.categories.push(c); }
   c.name=name; c.icon=icon;
-  setBudgetOf(c,UI.who,budget); setPeriodOf(c,UI.who,per);
+  setBudgetOf(c,budget); setPeriodOf(c,per);
   save(); queueSync('categories');
   closeModal(); render(); toast('🏷️ Kategori disimpan.');
 };
@@ -1467,139 +1398,112 @@ function toast(msg){
    ===================================================================== */
 function lockScreen(){
   const el=$('#lock');
-  const open=['a','b'].filter(w=>!pinOf(w));   // yang belum memasang PIN boleh masuk langsung
   el.innerHTML=`
     <div class="lockbox">
       <div class="lockicon">🔒</div>
-      <h2>Masuk</h2>
-      <p class="small mut" style="margin:2px 0 16px">Masukkan PIN-mu. Kamu akan masuk ke catatanmu sendiri,
-        dan hanya catatan itu yang bisa kamu ubah.</p>
+      <h2>${esc(myName())}</h2>
+      <p class="small mut" style="margin:2px 0 16px">Masukkan PIN untuk membuka catatan keuanganmu.</p>
       <input id="lockPin" type="password" inputmode="numeric" autocomplete="off" maxlength="12"
         placeholder="••••" class="pinin" onkeydown="if(event.key==='Enter')tryUnlock()">
       <div id="lockMsg" class="small" style="color:var(--out);font-weight:700;min-height:18px;margin:8px 0"></div>
       <button class="btn" onclick="tryUnlock()">Buka</button>
-      ${open.map(w=>`<button class="btn ghost" style="margin-top:8px" onclick="enterOpen('${w}')">Masuk sebagai ${esc(nameOf(w))} (belum berPIN)</button>`).join('')}
       <button class="btn ghost" style="margin-top:8px" onclick="forgotPin()">Lupa PIN?</button>
     </div>`;
   el.classList.add('on');
   setTimeout(()=>{const i=$('#lockPin'); if(i) i.focus();},80);
 }
-function enterAs(who){
-  SESSION.authAs=who; SESSION.lastAct=Date.now();
-  UI.who=who;
-  $('#lock').classList.remove('on');
-  render();
-  toast('🔓 Masuk sebagai '+nameOf(who));
-}
-window.enterOpen=w=>{ if(!pinOf(w)) enterAs(w); };
 window.tryUnlock=async()=>{
   const inp=$('#lockPin'), msg=$('#lockMsg');
   const v=(inp.value||'').trim();
   if(!v){ msg.textContent='PIN belum diisi.'; return; }
-  const hash=await sha256(v);
-  const who=['a','b'].find(w=>pinOf(w)&&pinOf(w)===hash);
-  if(!who){ msg.textContent='PIN salah, coba lagi.'; inp.value=''; inp.focus(); return; }
-  enterAs(who);
+  if(await sha256(v)!==myPin()){ msg.textContent='PIN salah, coba lagi.'; inp.value=''; inp.focus(); return; }
+  SESSION.unlocked=true; SESSION.lastAct=Date.now();
+  $('#lock').classList.remove('on');
+  render();
+  toast('🔓 Selamat datang kembali, '+myName()+'!');
 };
 window.forgotPin=()=>{
   alert('PIN tidak bisa dilihat kembali karena hanya tersimpan dalam bentuk teracak.\n\n'
     +'Yang bisa dilakukan:\n'
-    +'• Pengguna satunya masuk dengan PIN miliknya, lalu hapus PIN yang lupa lewat Atur → Kunci Pribadi.\n'
-    +'• Atau pasang ulang aplikasi dan pulihkan dari file cadangan JSON.');
+    +'• Pulihkan dari file cadangan JSON di perangkat lain.\n'
+    +'• Atau hapus data aplikasi di HP ini lalu mulai lagi dari cadangan terakhir.');
 };
 function lockNow(){
-  SESSION.authAs=null;
+  SESSION.unlocked=false;
   ocrRelease();
   closeModal();
   if(anyPin()) lockScreen();
   else render();
 }
 window.lockNow=lockNow;
-/* dipakai tombol "Ganti pengguna" — keluar lalu masuk sebagai orang lain */
-window.switchUser=()=>{
-  if(!anyPin()) return toast('Pasang PIN dulu supaya tiap orang punya akses sendiri.');
-  lockNow();
-};
-function needEdit(who){
-  if(canEdit(who)) return true;
-  toast('👁️ Mode lihat saja — hanya ' + nameOf(who||UI.who) + ' yang bisa mengubah catatan ini.');
-  return false;
-}
 /* kunci otomatis setelah 5 menit tanpa aktivitas */
 const AUTOLOCK_MS=5*60*1000;
 setInterval(()=>{
-  if(!anyPin()||S.settings.autolock===false||!SESSION.authAs) return;
+  if(!anyPin()||S.settings.autolock===false||!SESSION.unlocked) return;
   if($('#lock').classList.contains('on')) return;
   if(Date.now()-SESSION.lastAct>AUTOLOCK_MS) lockNow();
 }, 20000);
 ['click','keydown','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{SESSION.lastAct=Date.now();},{passive:true}));
+
 /* ---------- ganti / hapus PIN ---------- */
 window.openPin=()=>{
-  const w=UI.who, has=!!pinOf(w);
-  if(!needEdit(w)) return;
+  const has=anyPin();
   $('#modal').innerHTML=`
     <h3>🔒 Kunci Pribadi<button class="x" onclick="closeModal()">✕</button></h3>
-    <div class="owner ${w}">PIN milik <b>${esc(nameOf(w))}</b>${w===L.me?' (kamu)':''} — hanya melindungi catatan ${esc(nameOf(w))}.</div>
     ${has?`<div class="field"><label>PIN lama</label><input id="pinOld" type="password" inputmode="numeric" maxlength="12" placeholder="••••"></div>`:''}
     <div class="field"><label>PIN baru (4–12 angka)</label><input id="pinNew" type="password" inputmode="numeric" maxlength="12" placeholder="••••"></div>
     <div class="field"><label>Ulangi PIN baru</label><input id="pinNew2" type="password" inputmode="numeric" maxlength="12" placeholder="••••"></div>
     <div id="pinMsg" class="small" style="color:var(--out);font-weight:700;min-height:18px;margin-bottom:8px"></div>
     <button class="btn" onclick="savePin()">💾 Simpan PIN</button>
     ${has?`<button class="btn danger" style="margin-top:8px" onclick="removePin()">🗑️ Hapus PIN (catatan jadi terbuka)</button>`:''}
-    <div class="tiny mut" style="margin-top:10px">PIN disimpan teracak (SHA-256) dan berlaku di kedua HP. Aplikasi mengunci sendiri setelah 5 menit menganggur.</div>`;
+    <div class="tiny mut" style="margin-top:10px">PIN disimpan teracak (SHA-256) dan ikut berlaku di perangkat lainmu. Aplikasi mengunci sendiri setelah 5 menit menganggur.</div>`;
   openModal();
 };
 window.savePin=async()=>{
-  const w=UI.who, msg=$('#pinMsg');
-  if(pinOf(w)){
+  const msg=$('#pinMsg');
+  if(anyPin()){
     const old=await sha256(($('#pinOld').value||'').trim());
-    if(old!==pinOf(w)){ msg.textContent='PIN lama salah.'; return; }
+    if(old!==myPin()){ msg.textContent='PIN lama salah.'; return; }
   }
   const p1=($('#pinNew').value||'').trim(), p2=($('#pinNew2').value||'').trim();
   if(!/^\d{4,12}$/.test(p1)){ msg.textContent='PIN harus 4–12 angka.'; return; }
   if(p1!==p2){ msg.textContent='Ulangan PIN tidak sama.'; return; }
-  S.settings.pin=S.settings.pin||{a:'',b:''};
-  S.settings.pin[w]=await sha256(p1);
-  SESSION.authAs=w;                     // yang baru memasang PIN otomatis jadi pemilik sesi
+  S.settings.pin=await sha256(p1);
+  SESSION.unlocked=true;
   save(); queueSync('settings');
-  closeModal(); render(); toast('🔒 PIN tersimpan — catatan '+nameOf(w)+' kini terkunci.');
+  closeModal(); render(); toast('🔒 PIN tersimpan — aplikasi kini terkunci.');
 };
 window.removePin=async()=>{
-  const w=UI.who;
   const old=await sha256(($('#pinOld').value||'').trim());
-  if(old!==pinOf(w)){ $('#pinMsg').textContent='Isi PIN lama dulu untuk menghapus.'; return; }
-  S.settings.pin[w]='';
+  if(old!==myPin()){ $('#pinMsg').textContent='Isi PIN lama dulu untuk menghapus.'; return; }
+  S.settings.pin='';
   save(); queueSync('settings');
-  closeModal(); render(); toast('Kunci untuk '+nameOf(w)+' dihapus.');
+  closeModal(); render(); toast('Kunci aplikasi dihapus.');
 };
 
 /* ---------- setup pertama kali ---------- */
 function firstSetup(){
   $('#modal').innerHTML=`
   <h3>👋 Selamat datang!</h3>
-  <p class="small mut" style="margin:0 0 12px">Aplikasi pencatatan keuangan bulanan untuk <b>dua orang, dua HP</b>.
-  Isi dulu nama kedua pengguna:</p>
-  <div class="field"><label>Nama orang ke-1</label><input id="fsA" placeholder="cth: Lukas"></div>
-  <div class="field"><label>Nama orang ke-2</label><input id="fsB" placeholder="cth: Sinta"></div>
-  <div class="field"><label>HP ini dipakai oleh</label>
-    <div class="seg"><button id="fsMa" class="on" onclick="fsMe('a')">Orang ke-1</button><button id="fsMb" onclick="fsMe('b')">Orang ke-2</button></div></div>
+  <p class="small mut" style="margin:0 0 12px">Aplikasi pencatatan keuangan bulanan untuk <b>dirimu sendiri</b>.
+  Isi dulu namamu:</p>
+  <div class="field"><label>Namamu</label><input id="fsName" placeholder="cth: Lukas"></div>
   <button class="btn" onclick="fsDone()">Mulai 🚀</button>
-  <div class="tiny mut" style="margin-top:10px">Sambungkan kedua HP lewat menu <b>Atur → Sinkronisasi 2 HP</b> supaya catatannya jadi satu.</div>`;
+  <div class="tiny mut" style="margin-top:10px">Punya HP atau tablet lain? Sambungkan lewat <b>Atur → Sinkronisasi Antar Perangkat</b> supaya catatannya jadi satu.</div>`;
   openModal();
+  setTimeout(()=>{const i=$('#fsName'); if(i) i.focus();},80);
 }
-window.fsMe=w=>{ L.me=w; $('#fsMa').classList.toggle('on',w==='a'); $('#fsMb').classList.toggle('on',w==='b'); };
 window.fsDone=()=>{
-  const a=$('#fsA').value.trim(), b=$('#fsB').value.trim();
-  if(a) S.settings.nameA=a;
-  if(b) S.settings.nameB=b;
-  L.setupDone=true; UI.who=L.me;
+  const n=$('#fsName').value.trim();
+  if(n) S.settings.name=n;
+  L.setupDone=true;
   save(); saveL(); queueSync('settings');
   closeModal(); render();
-  toast('Selamat mencatat, '+nameOf(L.me)+'! 🎉');
+  toast('Selamat mencatat, '+myName()+'! 🎉');
 };
 
 /* =====================================================================
-   SINKRONISASI 2 HP (Firebase Firestore — akun milik pengguna sendiri).
+   SINKRONISASI ANTAR PERANGKAT (Firebase Firestore — akun milik pengguna sendiri).
    Semua perangkat dengan Kode Sinkronisasi yang sama saling terhubung
    real-time. Panduan pembuatan akun: PANDUAN_KEUANGAN.md
    ===================================================================== */
@@ -1660,7 +1564,7 @@ function pushKV(id){
   let data;
   if(id==='categories') data=S.categories;
   else if(id==='reviews') data=S.reviews;
-  else if(id==='settings') data={nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency, limitTotal:S.settings.limitTotal, pin:S.settings.pin, autolock:S.settings.autolock};
+  else if(id==='settings') data={name:S.settings.name, currency:S.settings.currency, limitTotal:S.settings.limitTotal, pin:S.settings.pin, autolock:S.settings.autolock};
   SYNC.db.doc(kvPath(id)).set({j:JSON.stringify(data), dev:L.deviceId, at:Date.now()})
     .then(()=>setSyncBadge('on'))
     .catch(e=>setSyncBadge('err','☁️ Gagal kirim: '+e.message));
@@ -1687,7 +1591,7 @@ function listenCloud(){
       if(val==null) return;
       const id=ch.doc.id;
       if(id==='categories'){ S.categories=val; changed=true; }
-      else if(id==='settings'){ Object.assign(S.settings,{nameA:val.nameA??S.settings.nameA, nameB:val.nameB??S.settings.nameB, currency:val.currency??S.settings.currency, limitTotal:val.limitTotal??S.settings.limitTotal, pin:val.pin??S.settings.pin, autolock:val.autolock??S.settings.autolock}); changed=true; }
+      else if(id==='settings'){ Object.assign(S.settings,{name:val.name??S.settings.name, currency:val.currency??S.settings.currency, limitTotal:val.limitTotal??S.settings.limitTotal, pin:val.pin??S.settings.pin, autolock:val.autolock??S.settings.autolock}); migrateToSingle(); changed=true; }
       else if(id==='reviews'){
         for(const k in val){ const cur=S.reviews[k]; if(!cur||(val[k].at||0)>=(cur.at||0)) S.reviews[k]=val[k]; }
         changed=true;
@@ -1717,14 +1621,14 @@ function remoteRefresh(){
     setSyncBadge('on');
     if($('#overlay').classList.contains('open')) return; // jangan ganggu saat sedang mengisi form
     render();
-    toast('🔄 Ada catatan baru dari HP satunya');
+    toast('🔄 Data diperbarui dari perangkat lain');
   },400);
 }
 
 /* ---------- ekspor / impor / demo / hapus ---------- */
 window.exportJson=()=>{
-  const data={app:'catatan-keuangan', version:1, exportedAt:new Date().toISOString(),
-    settings:{nameA:S.settings.nameA, nameB:S.settings.nameB, currency:S.settings.currency, limitTotal:S.settings.limitTotal, pin:S.settings.pin, autolock:S.settings.autolock},
+  const data={app:'catatan-keuangan', version:2, exportedAt:new Date().toISOString(),
+    settings:{name:S.settings.name, currency:S.settings.currency, limitTotal:S.settings.limitTotal, pin:S.settings.pin, autolock:S.settings.autolock},
     categories:S.categories, tx:S.tx, reviews:S.reviews};
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const a=document.createElement('a');
@@ -1742,7 +1646,8 @@ window.importJson=inp=>{
       if(!Array.isArray(d.tx)||!Array.isArray(d.categories)) throw new Error('format tidak dikenal');
       if(!confirm('Impor akan MENGGANTI data di HP ini dengan isi file ('+d.tx.length+' transaksi). Lanjutkan?')) return;
       S.categories=d.categories; S.tx=d.tx; S.reviews=d.reviews||{};
-      if(d.settings){ S.settings.nameA=d.settings.nameA||S.settings.nameA; S.settings.nameB=d.settings.nameB||S.settings.nameB; S.settings.currency=d.settings.currency||S.settings.currency; S.settings.limitTotal=d.settings.limitTotal||S.settings.limitTotal; S.settings.pin=d.settings.pin||S.settings.pin; if(d.settings.autolock!==undefined) S.settings.autolock=d.settings.autolock; }
+      if(d.settings){ S.settings.name=d.settings.name||d.settings.nameA||S.settings.name; S.settings.currency=d.settings.currency||S.settings.currency; if(d.settings.limitTotal!==undefined) S.settings.limitTotal=d.settings.limitTotal; if(d.settings.pin!==undefined) S.settings.pin=d.settings.pin; if(d.settings.autolock!==undefined) S.settings.autolock=d.settings.autolock; }
+      migrateToSingle();
       save(); render(); toast('⬆️ Data berhasil diimpor.');
       if(SYNC.on) pushAllToCloud();
     }catch(e){ toast('❌ File tidak valid: '+e.message); }
@@ -1751,7 +1656,7 @@ window.importJson=inp=>{
   r.readAsText(f);
 };
 window.wipeAll=async()=>{
-  if(!confirm('Hapus SEMUA data (transaksi, review, kategori) di HP ini'+(SYNC.on?' DAN di cloud (HP satunya ikut terhapus)':'')+'?')) return;
+  if(!confirm('Hapus SEMUA data (transaksi, review, kategori) di HP ini'+(SYNC.on?' DAN di cloud (perangkat lain ikut terhapus)':'')+'?')) return;
   if(!confirm('Yakin? Tindakan ini tidak bisa dibatalkan.')) return;
   if(SYNC.on){
     try{
@@ -1761,7 +1666,7 @@ window.wipeAll=async()=>{
     }catch(e){/* biarkan */}
   }
   const sy=S.settings.sync;
-  S={settings:{nameA:'Orang 1', nameB:'Orang 2', sync:sy}, categories:defaultCats(), tx:[], reviews:{}};
+  S={settings:{name:'Saya', currency:S.settings.currency||'GBP', limitTotal:0, pin:'', autolock:true, sync:sy}, categories:defaultCats(), tx:[], reviews:{}};
   L.setupDone=false;
   save(); saveL();
   location.reload();
@@ -1770,57 +1675,55 @@ window.fillDemo=()=>{
   if(S.tx.length&&!confirm('Tambahkan data contoh ke catatan yang sudah ada?')) return;
   const cur_=mkeyNow(), prv=mAdd(cur_,-1);
   const D=(mk,day)=>mk+'-'+pad(day);
-  const A=(gbp,idr)=>cur().dec>0?gbp:idr; // nominal contoh mengikuti mata uang aktif
-  const mk=(date,type,catId,who,amount,note)=>({id:'demo-'+rid(8), date, type, catId, who, amount, note, at:Date.now()});
+  const A=(gbp,idr)=>cur().dec>0?gbp:idr;      // nominal contoh mengikuti mata uang aktif
+  const mk=(date,type,catId,amount,note)=>({id:'demo-'+rid(8), date, type, catId, amount, note, at:Date.now()});
   const demo=[
     // bulan lalu (lengkap — bahan untuk review)
-    mk(D(prv,1),'in','gaji','a',A(2400,5200000),'Gaji bulanan'),
-    mk(D(prv,1),'in','gaji','b',A(1900,4300000),'Gaji bulanan'),
-    mk(D(prv,2),'out','rumah','a',A(950,1500000),'Sewa rumah'),
-    mk(D(prv,3),'out','nabung','b',A(400,1000000),'Transfer tabungan bersama'),
-    mk(D(prv,4),'out','tagihan','b',A(120,350000),'Listrik & air'),
-    mk(D(prv,5),'out','tagihan','a',A(40,150000),'Paket data 2 HP'),
-    mk(D(prv,6),'out','belanja','b',A(86.50,480000),'Belanja mingguan'),
-    mk(D(prv,9),'out','makan','a',A(28,85000),'Makan di luar'),
-    mk(D(prv,12),'out','transport','a',A(60,200000),'Bensin'),
-    mk(D(prv,13),'out','belanja','b',A(81.20,450000),'Belanja mingguan'),
-    mk(D(prv,15),'out','hiburan','b',A(30,120000),'Nonton bioskop'),
-    mk(D(prv,18),'out','sehat','a',A(22.50,95000),'Obat & vitamin'),
-    mk(D(prv,20),'out','belanja','b',A(78.40,430000),'Belanja mingguan'),
-    mk(D(prv,22),'out','makan','b',A(9.50,65000),'Jajan kopi'),
-    mk(D(prv,25),'out','keluarga','a',A(75,300000),'Kado orang tua'),
-    mk(D(prv,27),'out','belanja','b',A(76,420000),'Belanja mingguan'),
-    mk(D(prv,28),'out','hiburan','a',A(55,150000),'Makan malam di luar'),
+    mk(D(prv,1),'in','gaji',A(2400,5200000),'Gaji bulanan'),
+    mk(D(prv,2),'out','rumah',A(950,1500000),'Sewa rumah'),
+    mk(D(prv,3),'out','nabung',A(400,1000000),'Transfer tabungan'),
+    mk(D(prv,4),'out','tagihan',A(120,350000),'Listrik & air'),
+    mk(D(prv,5),'out','tagihan',A(40,150000),'Paket data HP'),
+    mk(D(prv,6),'out','belanja',A(86.50,480000),'Belanja mingguan'),
+    mk(D(prv,9),'out','makan',A(28,85000),'Makan di luar'),
+    mk(D(prv,11),'out','baju',A(32,180000),'Kaos & kaus kaki'),
+    mk(D(prv,12),'out','transport',A(60,200000),'Bensin'),
+    mk(D(prv,13),'out','belanja',A(81.20,450000),'Belanja mingguan'),
+    mk(D(prv,15),'out','hiburan',A(30,120000),'Nonton bioskop'),
+    mk(D(prv,17),'out','skincare',A(24,140000),'Serum & sunscreen'),
+    mk(D(prv,18),'out','sehat',A(22.50,95000),'Obat & vitamin'),
+    mk(D(prv,20),'out','belanja',A(78.40,430000),'Belanja mingguan'),
+    mk(D(prv,22),'out','makan',A(9.50,65000),'Jajan kopi'),
+    mk(D(prv,25),'out','keluarga',A(75,300000),'Kado orang tua'),
+    mk(D(prv,27),'out','belanja',A(76,420000),'Belanja mingguan'),
+    mk(D(prv,28),'out','hiburan',A(55,150000),'Makan malam di luar'),
     // bulan berjalan
-    mk(D(cur_,1),'in','gaji','a',A(2400,5200000),'Gaji bulanan'),
-    mk(D(cur_,1),'in','gaji','b',A(1900,4300000),'Gaji bulanan'),
-    mk(D(cur_,2),'out','rumah','a',A(950,1500000),'Sewa rumah'),
-    mk(D(cur_,3),'out','nabung','b',A(450,1200000),'Transfer tabungan bersama'),
-    mk(D(cur_,4),'out','tagihan','b',A(115,340000),'Listrik & air'),
-    mk(D(cur_,6),'out','belanja','b',A(83.70,470000),'Belanja mingguan'),
-    mk(D(cur_,8),'out','transport','a',A(45,150000),'Bensin'),
-    mk(D(cur_,10),'out','makan','a',A(14.50,75000),'Makan siang kantor'),
-    mk(D(cur_,13),'out','belanja','b',A(79.90,455000),'Belanja mingguan'),
-    mk(D(cur_,15),'out','hiburan','b',A(25,90000),'Jajan weekend'),
+    mk(D(cur_,1),'in','gaji',A(2400,5200000),'Gaji bulanan'),
+    mk(D(cur_,2),'out','rumah',A(950,1500000),'Sewa rumah'),
+    mk(D(cur_,3),'out','nabung',A(450,1200000),'Transfer tabungan'),
+    mk(D(cur_,4),'out','tagihan',A(115,340000),'Listrik & air'),
+    mk(D(cur_,6),'out','belanja',A(83.70,470000),'Belanja mingguan'),
+    mk(D(cur_,7),'out','makeup',A(18,95000),'Lipstik'),
+    mk(D(cur_,8),'out','transport',A(45,150000),'Bensin'),
+    mk(D(cur_,10),'out','makan',A(14.50,75000),'Makan siang kantor'),
+    mk(D(cur_,13),'out','belanja',A(79.90,455000),'Belanja mingguan'),
+    mk(D(cur_,15),'out','hiburan',A(25,90000),'Jajan weekend'),
   ].filter(t=>t.date<=todayStr()||t.date.slice(0,7)===prv);
   S.tx.push(...demo);
-  // contoh anggaran
-  // contoh batas: sebagian dipatok harian/mingguan agar terlihat detailnya
-  const setBud=(id,va,vb,per)=>{const c=S.categories.find(x=>x.id===id); if(!c) return;
-    if(!budgetOf(c,'a')){ setBudgetOf(c,'a',va); setPeriodOf(c,'a',per||'month'); }
-    if(!budgetOf(c,'b')){ setBudgetOf(c,'b',vb); setPeriodOf(c,'b',per||'month'); }};
-  setBud('makan',     A(3,8000),      A(2,5000),      'day');
-  setBud('belanja',   A(15,70000),    A(80,400000),   'week');
-  setBud('transport', A(90,300000),   A(30,100000));
-  setBud('tagihan',   A(60,200000),   A(140,400000));
-  setBud('hiburan',   A(70,180000),   A(50,120000));
-  setBud('nabung',    A(200,600000),  A(500,1500000));
-  setBud('rumah',     A(1000,1600000), 0);
-  const lt=S.settings.limitTotal=S.settings.limitTotal||{a:0,b:0};
-  if(!lt.a) lt.a=A(1500,3800000);
-  if(!lt.b) lt.b=A(1200,3000000);
-  queueSync('settings');
-  save(); queueSync('categories');
+  // contoh batas: sebagian dipatok harian/mingguan agar terlihat rincinya
+  const setBud=(id,v,per)=>{const c=S.categories.find(x=>x.id===id); if(c&&!budgetOf(c)){ setBudgetOf(c,v); setPeriodOf(c,per||'month'); }};
+  setBud('makan',     A(5,15000),     'day');
+  setBud('belanja',   A(90,480000),   'week');
+  setBud('transport', A(90,300000));
+  setBud('tagihan',   A(180,600000));
+  setBud('hiburan',   A(90,250000));
+  setBud('nabung',    A(450,1200000));
+  setBud('rumah',     A(1000,1600000));
+  setBud('baju',      A(60,300000));
+  setBud('makeup',    A(30,150000));
+  setBud('skincare',  A(40,200000));
+  if(!totalLimit()) S.settings.limitTotal=A(2200,5000000);
+  save(); queueSync('categories'); queueSync('settings');
   if(SYNC.on) for(const t of demo) pushTxCloud(t);
   render(); toast('🎬 Data contoh dimuat — jelajahi Beranda, Riwayat, dan Review!');
 };
@@ -1829,7 +1732,6 @@ window.fillDemo=()=>{
 load();
 let PENDING_CATS=mergeNewCats()>0;   // kategori baru (Baju/Make Up/Skincare) untuk data lama
 if(PENDING_CATS) save();
-UI.who=L.me;               // tampilan selalu dibuka pada pemilik HP ini
 render();
 if(!L.setupDone) firstSetup();
 else{ saveL(); if(anyPin()) lockScreen(); }   // sesi baru selalu minta identitas dulu

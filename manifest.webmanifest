@@ -1,7 +1,7 @@
 {
-  "name": "Catatan Keuangan — Pencatatan Bulanan 2 Orang",
+  "name": "Catatan Keuangan — Pencatatan Bulanan Pribadi",
   "short_name": "Keuangan",
-  "description": "Catatan keuangan bulanan untuk dua orang di dua HP: pemasukan, pengeluaran, anggaran, sinkronisasi real-time, dan review setiap bulan.",
+  "description": "Catatan keuangan bulanan pribadi: pemasukan, pengeluaran, batas pengeluaran, scan struk, dan review bulanan dengan grafik.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -10,7 +10,17 @@
   "theme_color": "#5b5bd6",
   "lang": "id",
   "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }

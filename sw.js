@@ -1,8 +1,8 @@
-/* Service worker Keuangan Berdua — membuat aplikasi bisa di-install
+/* Service worker Catatan Keuangan — membuat aplikasi bisa di-install
    di layar HP dan tetap berjalan tanpa internet.
    Halaman: network-first (update langsung terlihat saat online,
    cache dipakai saat offline). Aset lain: cache-first. */
-const CACHE = 'keuangan-berdua-v2';
+const CACHE = 'catatan-keuangan-v3';
 const CORE = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
