@@ -28,6 +28,15 @@ CREATE TYPE "GroceryListStatus" AS ENUM ('ACTIVE', 'COMPLETED', 'ARCHIVED');
 -- CreateEnum
 CREATE TYPE "PriceSource" AS ENUM ('MANUAL', 'RECEIPT', 'IMPORT');
 
+-- CreateEnum
+CREATE TYPE "StoreSource" AS ENUM ('OSM', 'MANUAL', 'IMPORT');
+
+-- CreateEnum
+CREATE TYPE "ImportSource" AS ENUM ('OVERPASS', 'NOMINATIM', 'OPEN_PRICES');
+
+-- CreateEnum
+CREATE TYPE "ImportStatus" AS ENUM ('RUNNING', 'SUCCESS', 'FAILED', 'SKIPPED');
+
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -307,12 +316,19 @@ CREATE TABLE "Store" (
     "name" TEXT NOT NULL,
     "brand" TEXT,
     "osmId" TEXT,
+    "osmType" TEXT,
+    "shopType" TEXT,
+    "source" "StoreSource" NOT NULL DEFAULT 'MANUAL',
     "latitude" DOUBLE PRECISION,
     "longitude" DOUBLE PRECISION,
     "address" TEXT,
     "city" TEXT,
     "postcode" TEXT,
+    "country" VARCHAR(2),
     "openingHours" TEXT,
+    "website" TEXT,
+    "lastSyncedAt" TIMESTAMP(3),
+    "pricesSyncedAt" TIMESTAMP(3),
     "isFavorite" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
@@ -323,11 +339,15 @@ CREATE TABLE "Store" (
 -- CreateTable
 CREATE TABLE "PriceEntry" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
+    "userId" TEXT,
     "storeId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "nameNormalized" TEXT NOT NULL,
     "ingredientId" TEXT,
+    "externalId" TEXT,
+    "productCode" TEXT,
+    "sourceUrl" TEXT,
+    "isDiscounted" BOOLEAN NOT NULL DEFAULT false,
     "price" DECIMAL(10,2) NOT NULL,
     "currency" VARCHAR(3) NOT NULL DEFAULT 'GBP',
     "packQuantity" DECIMAL(10,3),
@@ -338,6 +358,42 @@ CREATE TABLE "PriceEntry" (
     "observedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "PriceEntry_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "SavedLocation" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "label" TEXT NOT NULL,
+    "address" TEXT,
+    "latitude" DOUBLE PRECISION NOT NULL,
+    "longitude" DOUBLE PRECISION NOT NULL,
+    "radiusM" INTEGER NOT NULL DEFAULT 2000,
+    "isDefault" BOOLEAN NOT NULL DEFAULT false,
+    "origin" TEXT NOT NULL DEFAULT 'manual',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "SavedLocation_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "ImportRun" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT,
+    "source" "ImportSource" NOT NULL,
+    "status" "ImportStatus" NOT NULL DEFAULT 'RUNNING',
+    "params" JSONB NOT NULL,
+    "cacheKey" TEXT NOT NULL,
+    "itemsFetched" INTEGER NOT NULL DEFAULT 0,
+    "itemsCreated" INTEGER NOT NULL DEFAULT 0,
+    "itemsUpdated" INTEGER NOT NULL DEFAULT 0,
+    "itemsSkipped" INTEGER NOT NULL DEFAULT 0,
+    "errorMessage" TEXT,
+    "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "finishedAt" TIMESTAMP(3),
+
+    CONSTRAINT "ImportRun_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -446,10 +502,28 @@ CREATE INDEX "Store_userId_idx" ON "Store"("userId");
 CREATE INDEX "Store_latitude_longitude_idx" ON "Store"("latitude", "longitude");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "PriceEntry_externalId_key" ON "PriceEntry"("externalId");
+
+-- CreateIndex
 CREATE INDEX "PriceEntry_userId_nameNormalized_observedAt_idx" ON "PriceEntry"("userId", "nameNormalized", "observedAt" DESC);
 
 -- CreateIndex
-CREATE INDEX "PriceEntry_storeId_nameNormalized_idx" ON "PriceEntry"("storeId", "nameNormalized");
+CREATE INDEX "PriceEntry_storeId_nameNormalized_observedAt_idx" ON "PriceEntry"("storeId", "nameNormalized", "observedAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "PriceEntry_productCode_idx" ON "PriceEntry"("productCode");
+
+-- CreateIndex
+CREATE INDEX "SavedLocation_userId_isDefault_idx" ON "SavedLocation"("userId", "isDefault");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "SavedLocation_userId_label_key" ON "SavedLocation"("userId", "label");
+
+-- CreateIndex
+CREATE INDEX "ImportRun_cacheKey_startedAt_idx" ON "ImportRun"("cacheKey", "startedAt" DESC);
+
+-- CreateIndex
+CREATE INDEX "ImportRun_source_status_idx" ON "ImportRun"("source", "status");
 
 -- AddForeignKey
 ALTER TABLE "Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -528,4 +602,10 @@ ALTER TABLE "PriceEntry" ADD CONSTRAINT "PriceEntry_storeId_fkey" FOREIGN KEY ("
 
 -- AddForeignKey
 ALTER TABLE "PriceEntry" ADD CONSTRAINT "PriceEntry_ingredientId_fkey" FOREIGN KEY ("ingredientId") REFERENCES "Ingredient"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "SavedLocation" ADD CONSTRAINT "SavedLocation_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "ImportRun" ADD CONSTRAINT "ImportRun_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
