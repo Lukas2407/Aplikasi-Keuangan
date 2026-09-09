@@ -44,3 +44,10 @@ Hasil review yang disimpan sebagai PDF:
 HTML + CSS + JavaScript murni dalam satu file (`index.html`), PWA (manifest + service worker),
 penyimpanan localStorage, OCR struk lewat Tesseract.js, grafik SVG tanpa pustaka luar,
 sinkronisasi opsional via Firebase Firestore pada akun pengguna sendiri.
+
+## 🍽️ Aplikasi kedua: Dapur Kita (perencana menu makan)
+
+Proyek terpisah di folder [`meal-planner/`](meal-planner/): PWA Next.js untuk
+menyimpan resep, menyusun rencana makan mingguan, dan membuat daftar belanja
+otomatis. Berbeda dari aplikasi keuangan di atas, aplikasi itu memakai basis
+data dan akun pengguna, jadi diterapkan lewat Vercel, bukan GitHub Pages.

@@ -1,0 +1,610 @@
+// =============================================================================
+// Dapur Kita: skema basis data (PostgreSQL + Prisma)
+//
+// Prinsip yang dipegang di seluruh skema:
+//
+// 1. Isolasi data. Setiap tabel milik pengguna membawa userId dengan
+//    onDelete: Cascade. Tidak ada satu pun kueri aplikasi yang boleh
+//    mengambil baris tanpa menyaring userId (lihat lib/db-scope.ts).
+// 2. Bahan disimpan dua lapis: teks asli dari resep (raw) dan hasil urai
+//    (quantity, unit, name). Yang asli tidak pernah dibuang, sehingga hasil
+//    parsing AI yang salah bisa diperbaiki tanpa kehilangan sumbernya.
+// 3. Penggabungan bahan untuk daftar belanja dan pencocokan harga memakai
+//    nameNormalized (huruf kecil, tanpa aksen, tanpa keterangan), bukan
+//    teks tampilan.
+// 4. Angka takaran dan uang memakai Decimal, bukan Float. 0.1 + 0.2 pada
+//    Float akan merusak total belanja.
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Supabase/Neon: koneksi lewat pooler untuk runtime, koneksi langsung
+  // untuk migrasi. Kalau memakai Postgres biasa, isi keduanya sama.
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================== ENUM =========================================
+
+enum MealSlot {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+}
+
+/// Rak toko. Dipakai untuk mengelompokkan daftar belanja supaya rute di
+/// dalam toko tidak bolak-balik. Urutannya sengaja mengikuti alur toko
+/// swalayan pada umumnya: segar dulu, beku terakhir.
+enum Aisle {
+  PRODUCE // sayur dan buah
+  MEAT_FISH // daging, ayam, ikan
+  DAIRY_EGGS // susu, keju, telur
+  BAKERY // roti dan kue
+  PANTRY // beras, tepung, minyak, gula
+  PASTA_RICE // pasta, mi, beras kemasan
+  CANNED_SAUCE // kalengan, saus, kecap
+  SPICES // bumbu dan rempah
+  FROZEN // beku
+  DRINKS // minuman
+  SNACKS // camilan
+  HOUSEHOLD // kebutuhan rumah tangga
+  OTHER
+}
+
+/// Satuan yang sudah dinormalkan. Satuan asli tetap disimpan di unitRaw
+/// (misalnya "sdm", "tablespoon", "sendok makan" semuanya jadi TBSP).
+enum Unit {
+  G
+  KG
+  ML
+  L
+  TSP
+  TBSP
+  CUP
+  PIECE
+  CLOVE
+  SLICE
+  BUNCH
+  CAN
+  PACK
+  PINCH
+  TO_TASTE
+}
+
+enum UnitSystem {
+  METRIC
+  IMPERIAL
+}
+
+enum RecipeSource {
+  MANUAL
+  URL
+  SOCIAL // TikTok, Instagram, YouTube
+  IMAGE // foto buku resep atau tangkapan layar
+  TEXT // tempel teks
+}
+
+enum ParseStatus {
+  PENDING
+  PARSED
+  NEEDS_REVIEW // AI berhasil tapi keyakinannya rendah
+  FAILED
+}
+
+enum StorageLocation {
+  FRIDGE
+  FREEZER
+  PANTRY
+  OTHER
+}
+
+enum GroceryListStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+enum PriceSource {
+  MANUAL
+  RECEIPT
+  IMPORT
+}
+
+// ============================== AUTENTIKASI ==================================
+// Bentuk tabel Account, Session, dan VerificationToken mengikuti kontrak
+// @auth/prisma-adapter. Jangan mengganti nama kolomnya: adapter mencarinya
+// persis seperti ini.
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+
+  /// Hanya terisi untuk login email + kata sandi (bcrypt, 12 rounds).
+  /// Login Google/Apple meninggalkan kolom ini null.
+  passwordHash String?
+
+  // Preferensi
+  locale          String     @default("id")
+  currency        String     @default("GBP") @db.VarChar(3)
+  unitSystem      UnitSystem @default(METRIC)
+  defaultServings Int        @default(2)
+  weekStartsOn    Int        @default(1) // 1 = Senin
+  timeZone        String     @default("Europe/London")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  recipes      Recipe[]
+  mealEntries  MealPlanEntry[]
+  groceryLists GroceryList[]
+  pantryItems  PantryItem[]
+  stores       Store[]
+  priceEntries PriceEntry[]
+  cookLogs     CookLog[]
+  imports      RecipeImportJob[]
+
+  @@index([email])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================== KATALOG BAHAN ================================
+
+/// Katalog bahan bersama (tanpa userId). Gunanya tiga:
+///   - memberi rak default supaya daftar belanja tidak perlu ditebak ulang,
+///   - menyatukan "bawang bombay" dan "bawang bombai" jadi satu baris,
+///   - jadi kunci untuk membandingkan harga antar toko.
+/// Baris baru boleh dibuat otomatis saat AI mengurai resep, karena itu ada
+/// kolom isVerified untuk memisahkan data seed dari tebakan mesin.
+model Ingredient {
+  id       String   @id @default(cuid())
+  name     String // tampilan, contoh "Bawang bombay"
+  slug     String   @unique // "bawang-bombay"
+  aisle    Aisle    @default(OTHER)
+  synonyms String[] // "onion", "bawang bombai"
+
+  /// Untuk konversi takaran dapur ke gram (1 cup tepung != 1 cup gula).
+  gramsPerPiece Decimal? @db.Decimal(10, 2)
+  gramsPerCup   Decimal? @db.Decimal(10, 2)
+  densityGPerMl Decimal? @db.Decimal(10, 3)
+
+  // Gizi per 100 g, dipakai untuk ringkasan gizi mingguan bila tersedia.
+  kcalPer100g    Decimal? @db.Decimal(10, 2)
+  proteinPer100g Decimal? @db.Decimal(10, 2)
+  carbsPer100g   Decimal? @db.Decimal(10, 2)
+  fatPer100g     Decimal? @db.Decimal(10, 2)
+
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  recipeIngredients RecipeIngredient[]
+  groceryItems      GroceryItem[]
+  pantryItems       PantryItem[]
+  priceEntries      PriceEntry[]
+
+  @@index([aisle])
+}
+
+// ============================== RESEP ========================================
+
+model Recipe {
+  id     String @id @default(cuid())
+  userId String
+
+  title       String
+  description String? @db.Text
+  imageUrl    String? @db.Text
+  servings    Int     @default(2)
+  prepMinutes Int?
+  cookMinutes Int?
+  cuisine     String?
+
+  // Sumber dan jejak hasil impor
+  source      RecipeSource @default(MANUAL)
+  sourceUrl   String?      @db.Text
+  sourceName  String? // "BBC Good Food", "@akun.tiktok"
+  parseStatus ParseStatus  @default(PARSED)
+  parseModel  String? // model LLM yang dipakai, untuk telusur mutu
+  rawText     String?      @db.Text // teks mentah sebelum diurai
+
+  // Gizi per porsi. Null berarti belum diketahui, bukan nol.
+  caloriesPerServing Decimal? @db.Decimal(10, 2)
+  proteinG           Decimal? @db.Decimal(10, 2)
+  carbsG             Decimal? @db.Decimal(10, 2)
+  fatG               Decimal? @db.Decimal(10, 2)
+
+  isFavorite Boolean @default(false)
+  rating     Int? // 1..5
+  notes      String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user        User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredients RecipeIngredient[]
+  steps       RecipeStep[]
+  tags        RecipeTag[]
+  mealEntries MealPlanEntry[]
+  cookLogs    CookLog[]
+  sources     GroceryItemSource[]
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([userId, isFavorite])
+  @@index([userId, title])
+}
+
+model RecipeIngredient {
+  id       String @id @default(cuid())
+  recipeId String
+  position Int
+
+  /// Baris asli apa adanya, contoh "2 siung bawang putih, cincang halus".
+  raw String @db.Text
+
+  quantity       Decimal? @db.Decimal(10, 3)
+  /// Batas atas untuk takaran rentang ("2 sampai 3 sdm").
+  quantityMax    Decimal? @db.Decimal(10, 3)
+  unit           Unit?
+  unitRaw        String?
+  name           String
+  /// Kunci penggabungan dan pencarian harga.
+  nameNormalized String
+  note           String? // "cincang halus", "suhu ruang"
+  isOptional     Boolean  @default(false)
+
+  /// Rak disalin ke sini supaya pembuatan daftar belanja tidak perlu
+  /// menunggu join ke katalog, dan tetap benar walau bahan belum dikenal.
+  aisle Aisle @default(OTHER)
+
+  ingredientId String?
+  ingredient   Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  recipe       Recipe      @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  sources GroceryItemSource[]
+
+  @@unique([recipeId, position])
+  @@index([nameNormalized])
+  @@index([ingredientId])
+}
+
+model RecipeStep {
+  id           String  @id @default(cuid())
+  recipeId     String
+  position     Int
+  text         String  @db.Text
+  /// Diisi saat langkah menyebut durasi ("panggang 25 menit"), dipakai
+  /// mode memasak untuk menawarkan penghitung waktu.
+  timerSeconds Int?
+  imageUrl     String? @db.Text
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, position])
+}
+
+/// Label bebas milik pengguna ("cepat", "sahur", "tanpa daging").
+model RecipeTag {
+  id       String @id @default(cuid())
+  recipeId String
+  label    String
+  slug     String
+
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@unique([recipeId, slug])
+  @@index([slug])
+}
+
+/// Antrean impor. Mengurai URL atau gambar lewat LLM butuh beberapa detik
+/// dan bisa gagal, jadi prosesnya dicatat agar bisa diulang dan diaudit
+/// biayanya, bukan dijalankan diam-diam di dalam satu request.
+model RecipeImportJob {
+  id     String @id @default(cuid())
+  userId String
+
+  source       RecipeSource
+  inputUrl     String?      @db.Text
+  inputText    String?      @db.Text
+  inputImage   String?      @db.Text // path di object storage
+  status       ParseStatus  @default(PENDING)
+  model        String?
+  tokensUsed   Int?
+  costUsd      Decimal?     @db.Decimal(10, 4)
+  errorMessage String?      @db.Text
+  resultJson   Json?
+  recipeId     String? // terisi setelah resep dibuat
+
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status])
+}
+
+// ============================== RENCANA MAKAN ================================
+
+/// Satu baris = satu resep di satu slot pada satu tanggal.
+///
+/// Sengaja tidak ada tabel "MealPlan" per minggu. Minggu hanyalah rentang
+/// tanggal: menyimpannya sebagai entitas berarti harus membuat baris kosong
+/// untuk minggu yang belum diisi, dan setiap kueri lintas minggu (daftar
+/// belanja 10 hari, misalnya) jadi butuh join tambahan tanpa manfaat.
+model MealPlanEntry {
+  id     String @id @default(cuid())
+  userId String
+
+  date     DateTime @db.Date
+  slot     MealSlot
+  position Int      @default(0)
+
+  recipeId    String?
+  /// Untuk entri tanpa resep ("makan di luar", "sisa kemarin").
+  customTitle String?
+  servings    Int     @default(2)
+  note        String?
+
+  isCooked Boolean   @default(false)
+  cookedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe Recipe? @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+
+  sources GroceryItemSource[]
+
+  // Kunci gabungan ini yang membuat drag-and-drop di kalender aman:
+  // memindahkan resep jadi satu upsert, bukan hapus lalu buat.
+  @@unique([userId, date, slot, position])
+  @@index([userId, date])
+  @@index([recipeId])
+}
+
+model CookLog {
+  id       String   @id @default(cuid())
+  userId   String
+  recipeId String
+  cookedAt DateTime @default(now())
+  rating   Int?
+  notes    String?  @db.Text
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@index([userId, cookedAt(sort: Desc)])
+  @@index([recipeId])
+}
+
+// ============================== BELANJA ======================================
+
+model GroceryList {
+  id     String @id @default(cuid())
+  userId String
+
+  title     String            @default("Daftar belanja")
+  startDate DateTime          @db.Date
+  endDate   DateTime          @db.Date
+  status    GroceryListStatus @default(ACTIVE)
+
+  /// Toko yang dituju, dipakai untuk memilih harga acuan dan urutan rak.
+  storeId String?
+
+  /// Perkiraan total dari buku harga saat daftar dibuat. Disimpan karena
+  /// harga berubah: angka di riwayat harus tetap sesuai keadaan saat itu.
+  estimatedTotal Decimal? @db.Decimal(10, 2)
+  actualTotal    Decimal? @db.Decimal(10, 2)
+  currency       String   @default("GBP") @db.VarChar(3)
+
+  generatedAt DateTime  @default(now())
+  completedAt DateTime?
+  updatedAt   DateTime  @updatedAt
+
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store Store?        @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  items GroceryItem[]
+
+  @@index([userId, status, generatedAt(sort: Desc)])
+}
+
+model GroceryItem {
+  id     String @id @default(cuid())
+  listId String
+
+  name           String
+  nameNormalized String
+  quantity       Decimal? @db.Decimal(10, 3)
+  unit           Unit?
+  aisle          Aisle    @default(OTHER)
+  position       Int      @default(0)
+
+  /// Sudah ada di stok dapur, jadi ditandai tapi tidak dihapus supaya
+  /// pengguna tetap bisa melihat kenapa jumlahnya berkurang.
+  coveredByPantry Boolean  @default(false)
+  pantryQuantity  Decimal? @db.Decimal(10, 3)
+
+  isChecked Boolean   @default(false)
+  checkedAt DateTime?
+  isManual  Boolean   @default(false) // ditambah sendiri, bukan dari resep
+
+  estimatedPrice Decimal? @db.Decimal(10, 2)
+  actualPrice    Decimal? @db.Decimal(10, 2)
+
+  ingredientId String?
+
+  list       GroceryList         @relation(fields: [listId], references: [id], onDelete: Cascade)
+  ingredient Ingredient?         @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  sources    GroceryItemSource[]
+
+  @@unique([listId, nameNormalized, unit])
+  @@index([listId, aisle, position])
+}
+
+/// Penelusuran balik: satu baris belanja berasal dari bahan resep mana saja.
+/// Ini yang membuat UI bisa menampilkan "1,5 kg ayam: 2 resep" dan membuat
+/// penghapusan satu resep dari rencana bisa mengurangi jumlah dengan tepat.
+model GroceryItemSource {
+  id            String @id @default(cuid())
+  groceryItemId String
+
+  recipeId           String?
+  recipeIngredientId String?
+  mealPlanEntryId    String?
+
+  /// Sumbangan takaran dari satu bahan resep, sudah dikali penyesuaian porsi.
+  quantity Decimal? @db.Decimal(10, 3)
+  unit     Unit?
+
+  groceryItem      GroceryItem       @relation(fields: [groceryItemId], references: [id], onDelete: Cascade)
+  recipe           Recipe?           @relation(fields: [recipeId], references: [id], onDelete: SetNull)
+  recipeIngredient RecipeIngredient? @relation(fields: [recipeIngredientId], references: [id], onDelete: SetNull)
+  mealPlanEntry    MealPlanEntry?    @relation(fields: [mealPlanEntryId], references: [id], onDelete: SetNull)
+
+  @@index([groceryItemId])
+  @@index([recipeId])
+}
+
+// ============================== STOK DAPUR ===================================
+
+model PantryItem {
+  id     String @id @default(cuid())
+  userId String
+
+  name           String
+  nameNormalized String
+  quantity       Decimal?        @db.Decimal(10, 3)
+  unit           Unit?
+  location       StorageLocation @default(PANTRY)
+  expiresAt      DateTime?       @db.Date
+  openedAt       DateTime?       @db.Date
+
+  ingredientId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ingredient Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, nameNormalized, unit, location])
+  @@index([userId, expiresAt])
+}
+
+// ============================== TOKO & HARGA =================================
+
+/// Toko bisa berasal dari dua tempat: hasil pencarian peta (OpenStreetMap,
+/// userId null sehingga bisa dipakai bersama) atau ditambahkan sendiri oleh
+/// pengguna (userId terisi).
+model Store {
+  id     String  @id @default(cuid())
+  userId String?
+
+  name         String
+  brand        String? // "Tesco", "Lidl", "Indomaret"
+  osmId        String? @unique // "node/123456789"
+  latitude     Float?
+  longitude    Float?
+  address      String?
+  city         String?
+  postcode     String?
+  openingHours String?
+
+  isFavorite Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  priceEntries PriceEntry[]
+  groceryLists GroceryList[]
+
+  @@index([userId])
+  @@index([latitude, longitude])
+}
+
+/// Buku harga. Satu baris = satu pengamatan harga pada satu tanggal.
+///
+/// Catatan penting soal ruang lingkup: tidak ada API publik gratis yang
+/// memberi harga real-time dari toko sekitar (Tesco, Sainsbury, Indomaret,
+/// dan sejenisnya tidak membukanya). Jadi harga di sini berasal dari
+/// pengamatan pengguna sendiri: diketik, atau dibaca dari struk. Riwayat
+/// disimpan sebagai banyak baris, bukan satu kolom yang ditimpa, supaya
+/// tren harga dan perbandingan antar toko bisa dihitung.
+model PriceEntry {
+  id      String @id @default(cuid())
+  userId  String
+  storeId String
+
+  name           String
+  nameNormalized String
+  ingredientId   String?
+
+  price    Decimal @db.Decimal(10, 2)
+  currency String  @default("GBP") @db.VarChar(3)
+
+  /// Isi kemasan, untuk menghitung harga per satuan yang bisa dibandingkan
+  /// (contoh: 1,89 untuk 500 g menjadi 3,78 per kg).
+  packQuantity  Decimal? @db.Decimal(10, 3)
+  packUnit      Unit?
+  unitPrice     Decimal? @db.Decimal(10, 4)
+  unitPriceUnit Unit?
+
+  source     PriceSource @default(MANUAL)
+  observedAt DateTime    @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store      Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  ingredient Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+
+  @@index([userId, nameNormalized, observedAt(sort: Desc)])
+  @@index([storeId, nameNormalized])
+}
