@@ -24,8 +24,16 @@ maupun App Store.
 | B | Skema basis data (18 tabel) + seed katalog bahan | selesai, `prisma validate` lolos |
 | C | UI kalender makan dan daftar belanja | belum |
 | D | API impor resep (LLM) dan pembuat daftar belanja | belum |
-| E | Panduan penerapan dan uji pasang di HP | belum |
+| E | Panduan penerapan dan uji pasang di HP | selesai, lihat [DEPLOY.md](DEPLOY.md) |
 | Tambahan | Sinkronisasi toko dan harga per lokasi pilihan | selesai, uji unit lolos, panggilan live belum diuji |
+
+## Menerbitkan ke internet
+
+Langkah demi langkah ada di **[DEPLOY.md](DEPLOY.md)**: Vercel untuk aplikasinya,
+Neon atau Supabase untuk basis datanya, sekitar 15 menit, gratis untuk pemakaian
+pribadi. Satu hal yang wajib: isi `APP_PASSPHRASE`. Selama Auth.js belum
+terpasang, semua data jatuh ke satu pengguna, jadi gerbang kata sandi itu yang
+menahan orang lain masuk.
 
 ## Menjalankan di lokal
 

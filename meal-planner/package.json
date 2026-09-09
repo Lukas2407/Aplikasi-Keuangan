@@ -5,7 +5,7 @@
   "description": "PWA perencana menu makan: impor resep dengan AI, kalender makan mingguan, daftar belanja otomatis, stok dapur, dan perbandingan harga antar toko.",
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
@@ -16,7 +16,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "postinstall": "prisma generate",
     "test": "node --import tsx --test tests/*.test.ts",
-    "verify:sources": "tsx scripts/verify-sources.ts"
+    "verify:sources": "tsx scripts/verify-sources.ts",
+    "build:nodb": "prisma generate && next build"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
