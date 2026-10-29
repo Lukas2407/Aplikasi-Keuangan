@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Glob",
+      "Grep",
+      "WebSearch",
+      "WebFetch",
+      "Edit(./produksi/**)",
+      "Edit(./research/**)",
+      "Edit(./prompts/**)",
+      "Write(./produksi/**)",
+      "Write(./research/**)",
+      "Write(./prompts/**)",
+      "Bash(./tools/new-video.sh:*)",
+      "Bash(./tools/handoff-check.sh:*)",
+      "Bash(./tools/wordcount.sh:*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git add produksi/:*)",
+      "Bash(git commit:*)"
+    ],
+    "ask": [
+      "Edit(./config/**)",
+      "Edit(./templates/**)",
+      "Edit(./CLAUDE.md)",
+      "Edit(./.claude/**)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(rm -rf:*)",
+      "Bash(git push:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(sudo:*)"
+    ]
+  }
+}

@@ -1,0 +1,6 @@
+.env
+.env.*
+secrets/
+produksi/*/aset/*
+!produksi/*/aset/.gitkeep
+.claude/settings.local.json
